@@ -40,6 +40,7 @@ import { createAutosaveController } from './lib/autosave-system.js';
 import {
     niIsVectorInjectionDisabledByUser,
     niNormalizeVectorInjectionPreference,
+    niResolveDirectStageInjectionStages,
     niResolveStageInjectionPlan,
     niSetVectorInjectionDisabledByUser,
 } from './lib/injection-system.js';
@@ -2893,6 +2894,11 @@ async function onPromptReady(eventData) {
         niTbReconcileCurrentNode(tbNodesForRecall);
         curTbNode = tbNodesForRecall[S.tbCurIdx] || null;
     }
+    const directStageInjectionStages = niResolveDirectStageInjectionStages({
+        rawStages,
+        transBookMode: !!extension_settings[EXT_NAME]?.transBookMode,
+        currentStageIdx: curTbNode?.stageIdx,
+    });
     const vectorRecallScope = niResolveVectorRecallStageScopes({
         enabledStages,
         stageVecDone: S.stageVecDone,
@@ -2902,7 +2908,9 @@ async function onPromptReady(eventData) {
     if (!vectorInjectionDisabled && (
         vectorRecallScope.currentStages.length || vectorRecallScope.historicalStages.length
     )) {
-        const nodeRecallContext = curTbNode ? niBuildTbLightRecallContext(curTbNode) : null;
+        const nodeRecallContext = curTbNode
+            ? niBuildTbLightRecallContext(curTbNode, { nodes: getAllPlotsInStoryOrder(S) })
+            : null;
         const lightRecallContext = extension_settings[EXT_NAME]?.tbLightRecallMode
             ? nodeRecallContext
             : null;
@@ -2940,30 +2948,16 @@ async function onPromptReady(eventData) {
     }
 
     // ② 阶段剧情注入
-    if (rawStages.length) {
+    if (directStageInjectionStages.length) {
         const rawMode = niNormalizeRawInjMode(cfg.rawInjMode);
         const plotLines = [];
         if (rawMode === 'compressed') {
             await niEnsureChunksLoaded();
         }
 
-        // 穿书模式：计算哪些阶段因前序未完成而被锁定，锁定阶段跳过注入
-        const tbLockedStages = new Set();
-        if (extension_settings[EXT_NAME]?.transBookMode && S.stageMapN > 0) {
-            const tbNodes = niGetTbNodes();
-            const stageHasUndone = {};
-            tbNodes.forEach(nd => { if (!nd.done) stageHasUndone[nd.stageIdx] = true; });
-            const frontierStageIdx = niTbFrontierStage();
-            for (let si = 1; si <= S.stageMapN; si++) {
-                if (si <= frontierStageIdx) continue;
-                for (let prev = frontierStageIdx; prev < si; prev++) {
-                    if (stageHasUndone[prev]) { tbLockedStages.add(si); break; }
-                }
-            }
-        }
-
-        for (const si of rawStages) {
-            if (tbLockedStages.has(si)) continue; // 5.1：前序阶段有未完成节点，跳过注入
+        // 穿书模式只注入用户当前确认节点所属阶段；
+        // 其他开启阶段只保留开关状态，不能混入本轮请求。
+        for (const si of directStageInjectionStages) {
             if (rawMode === 'compressed') {
                 // 压缩原文模式：
                 // 优先用 S.chunkStageMap收集该阶段的 chunk，
