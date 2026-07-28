@@ -41,6 +41,7 @@ import {
     niIsVectorInjectionDisabledByUser,
     niNormalizeVectorInjectionPreference,
     niResolveDirectStageInjectionStages,
+    niResolvePausedTransbookPromptSlots,
     niResolveStageInjectionPlan,
     niSetVectorInjectionDisabledByUser,
 } from './lib/injection-system.js';
@@ -2898,6 +2899,7 @@ async function onPromptReady(eventData) {
         rawStages,
         transBookMode: !!extension_settings[EXT_NAME]?.transBookMode,
         currentStageIdx: curTbNode?.stageIdx,
+        paused: !!S.tbPaused,
     });
     const vectorRecallScope = niResolveVectorRecallStageScopes({
         enabledStages,
@@ -4503,7 +4505,7 @@ const _niSyncSettingsToUIPatched = function () {
 };
 window.syncSettingsToUI = _niSyncSettingsToUIPatched;
 
-// ── onPromptReady 补丁：注入穿书推进提示词 ───────────────────
+// ── onPromptReady 补丁：注入穿书开场/推进/持续/沉浸提示词 ─────
 // 直接在 CHAT_COMPLETION_PROMPT_READY 上追加一个独立监听
 // 注意：此处不再重复 import，而是直接追加到 eventData.chat，
 // 与 onPromptReady 内 doInject 的 fallback 逻辑一致，避免双重 import 开销。
@@ -4513,7 +4515,6 @@ jQuery(document).ready(function () {
             if (eventData?.dryRun) return;
             if (extension_settings[EXT_NAME]?.pluginEnabled === false) return;
             if (!extension_settings[EXT_NAME]?.transBookMode) return;
-            if (S.tbPaused) return;
 
             const cfg = extension_settings[EXT_NAME];
             let setExtensionPromptFn = null;
@@ -4524,13 +4525,28 @@ jQuery(document).ready(function () {
 
             const _inject = (slotKey, content) => {
                 content = niApplyUserSubstitution(content);
-                if (!content.trim()) return;
+                if (!content.trim()) {
+                    setExtensionPromptFn?.(slotKey, '', 1, 1, true, 0);
+                    return;
+                }
                 if (eventData?.chat && Array.isArray(eventData.chat)) {
                     niInsertIntoEventChat(eventData.chat, content, 1, 1, 0);
                 } else if (setExtensionPromptFn) {
                     setExtensionPromptFn(slotKey, content, 1, 1, true, 0);
                 }
             };
+
+            const immersionAppend = niTbGetImmersionAppend(cfg);
+            const pausedPromptSlots = niResolvePausedTransbookPromptSlots({
+                paused: !!S.tbPaused,
+                immersionContent: immersionAppend,
+            });
+            if (pausedPromptSlots) {
+                // 暂停开场/推进/持续提示词；沉浸提示只由自己的开关控制。
+                _inject(`${EXT_NAME}_tb_advance`, pausedPromptSlots.advanceContent);
+                _inject(`${EXT_NAME}_tb_ongoing`, pausedPromptSlots.ongoingContent);
+                return;
+            }
 
             // ── 一次性推进/开场提示词 ──────────────────────────
             // 只有当前确实停在首节点时才注入开场提示词。
@@ -4545,7 +4561,7 @@ jQuery(document).ready(function () {
 
             const pendingAdvancePrompt = niTbConsumePendingAdvancePrompt();
             if (pendingAdvancePrompt) {
-                const content = pendingAdvancePrompt + niTbGetImmersionAppend(cfg);
+                const content = pendingAdvancePrompt + immersionAppend;
                 _inject(`${EXT_NAME}_tb_advance`, content);
                 // 一次性提示词发出后，本次不再叠加持续提示词，避免重复
                 return;
@@ -4560,7 +4576,7 @@ jQuery(document).ready(function () {
             const ongoingTpl = (cfg.tbOngoingPrompt || TB_DEFAULT_ONGOING_PROMPT).trim();
             const ongoingContent = ongoingTpl
                 .replace(/{B_TITLE}/g, curNode.title)
-                .replace(/{B_BODY}/g,  curNode.body || '（暂无描述）') + niTbGetImmersionAppend(cfg);
+                .replace(/{B_BODY}/g,  curNode.body || '（暂无描述）') + immersionAppend;
             _inject(`${EXT_NAME}_tb_ongoing`, ongoingContent);
         });
         eventSource.makeLast?.(event_types.CHAT_COMPLETION_PROMPT_READY, niFinalUserSubPromptRewrite);
