@@ -38,7 +38,10 @@ import {
 import { createAutosaveController } from './lib/autosave-system.js';
 
 import {
+    NI_RAW_INJECTION_MAX_TOKENS_DEFAULT,
+    niBuildBoundedStageInjection,
     niIsVectorInjectionDisabledByUser,
+    niNormalizeRawInjectionMaxTokens,
     niNormalizeVectorInjectionPreference,
     niResolveDirectStageInjectionStages,
     niResolvePausedTransbookPromptSlots,
@@ -70,6 +73,7 @@ import {
 import {
     NI_DEV_CURRENT_TEXT_LIMIT,
     NI_DEV_RECALL_TEXT_LIMIT,
+    NI_STAGE_PAGE_SIZE_DEFAULT,
     captureCharacterMemory,
     capturePlotCheckpointMemory,
     getAllPlotsInStoryOrder,
@@ -81,6 +85,7 @@ import {
     niBuildDeviationFactsContext,
     niBuildDeviationFactsText,
     niBuildDeviationSectionsFromAnalysis,
+    niBuildStageRuntimeIndex,
     niBuildDevChatEntriesText,
     niDevIsCountableMessage,
     niDevMessageFloor,
@@ -95,6 +100,7 @@ import {
     niMergeDeviationSections,
     niNormalizeDeviationFacts,
     niNormalizeDeviationFactHistory,
+    niNormalizeStagePageSize,
     niReconcileDeviationFacts,
     niMergeDevMessagesByFloor,
     niMergeStageNodes,
@@ -225,10 +231,13 @@ const DEFAULT_SETTINGS = {
     charInjDepth: 4,
     charInjRole: 0,
     charAutoSleepEnabled: true, // 开启阶段时自动休眠本阶段正文未出现的角色人设
+    charPageSize: NI_STAGE_PAGE_SIZE_DEFAULT,
     // 阶段剧情注入设置
     plotInjPos: 1,   // 默认聊天内
     plotInjDepth: 4,
     plotInjRole: 0,
+    plotInjMaxTokens: NI_RAW_INJECTION_MAX_TOKENS_DEFAULT,
+    stagePageSize: NI_STAGE_PAGE_SIZE_DEFAULT,
     // 偏差注入设置
     devPrompt: DEV_PROMPT,
     devInjPos: 2,    // 默认主提示前，作为分支现实约束
@@ -502,6 +511,19 @@ function niLoadSettings() {
     Object.keys(DEFAULT_SETTINGS).forEach(k => {
         if (saved[k] === undefined) saved[k] = DEFAULT_SETTINGS[k];
     });
+    if (saved._paginationDefault20Initialized !== true) {
+        if (Number(saved.stagePageSize) === 50) saved.stagePageSize = DEFAULT_SETTINGS.stagePageSize;
+        saved.charPageSize = niNormalizeStagePageSize(saved.charPageSize, DEFAULT_SETTINGS.charPageSize);
+        saved._paginationDefault20Initialized = true;
+        saveSettingsDebounced();
+    }
+    if (saved._rawInjectionDefault32000Initialized !== true) {
+        if (Number(saved.plotInjMaxTokens) === 8000) {
+            saved.plotInjMaxTokens = DEFAULT_SETTINGS.plotInjMaxTokens;
+        }
+        saved._rawInjectionDefault32000Initialized = true;
+        saveSettingsDebounced();
+    }
     if (niNormalizeVectorInjectionPreference(saved)) saveSettingsDebounced();
     if (saved._charAutoSleepInitialized !== true) {
         saved.charAutoSleepEnabled = true;
@@ -577,6 +599,7 @@ function niLoadSettings() {
     }
 
     syncSettingsToUI();
+    niLoadStagePageFromChat();
     niLoadDeviationStateFromChat({ allowLegacyMigration: true, collapsed: true });
 
     // 启动时从服务端拉取重数据
@@ -648,9 +671,19 @@ function niSaveSettings() {
     cfg.charAutoSleepEnabled = q('#ni-char-auto-sleep-btn')
         ? q('#ni-char-auto-sleep-btn').classList.contains('on')
         : (cfg.charAutoSleepEnabled ?? DEFAULT_SETTINGS.charAutoSleepEnabled);
+    cfg.charPageSize = Math.max(1, Math.min(200,
+        parseInt(q('#ni-char-page-size')?.value ?? cfg.charPageSize, 10) || DEFAULT_SETTINGS.charPageSize
+    ));
     cfg.plotInjPos  = parseInt(q('#ni-plot-inj-pos')?.value) ?? DEFAULT_SETTINGS.plotInjPos;
     cfg.plotInjDepth= parseInt(q('#ni-plot-inj-depth')?.value) ?? DEFAULT_SETTINGS.plotInjDepth;
     cfg.plotInjRole = parseInt(q('#ni-plot-inj-role')?.value) ?? DEFAULT_SETTINGS.plotInjRole;
+    cfg.plotInjMaxTokens = niNormalizeRawInjectionMaxTokens(
+        q('#ni-plot-inj-max-tokens')?.value ?? cfg.plotInjMaxTokens,
+        DEFAULT_SETTINGS.plotInjMaxTokens,
+    );
+    cfg.stagePageSize = Math.max(1, Math.min(200,
+        parseInt(q('#ni-stage-page-size')?.value ?? cfg.stagePageSize, 10) || DEFAULT_SETTINGS.stagePageSize
+    ));
     cfg.devPrompt   = q('#ni-dev-pt-content')?.value || cfg.devPrompt || DEFAULT_SETTINGS.devPrompt;
     cfg.devInjPos   = niCfgInt('#ni-dev-inj-pos', DEFAULT_SETTINGS.devInjPos);
     cfg.devInjDepth = niCfgInt('#ni-dev-inj-depth', DEFAULT_SETTINGS.devInjDepth);
@@ -727,6 +760,40 @@ function niSaveSettings() {
     niAutosave?.schedule();
 }
 
+function niSaveStageRuntimeSettings() {
+    const cfg = extension_settings[EXT_NAME] || (extension_settings[EXT_NAME] = {});
+    cfg._stageStates = { ...(S.stageStates || {}) };
+    cfg._stageMapN = S.stageMapN;
+    saveSettingsDebounced();
+    niAutosave?.schedule();
+}
+
+function niUpdateStageInjectionBudgetNote(result = null) {
+    const note = q('#ni-stage-inj-budget-note');
+    if (!note) return;
+    const cfg = extension_settings[EXT_NAME] || {};
+    const maxTokens = niNormalizeRawInjectionMaxTokens(
+        cfg.plotInjMaxTokens,
+        DEFAULT_SETTINGS.plotInjMaxTokens,
+    );
+    if (!result) {
+        note.textContent = `未向量阶段单轮注入上限：${maxTokens.toLocaleString()} Token`;
+        note.classList.remove('ni-stage-budget-warning');
+        return;
+    }
+    const detailCount = result.detailStages?.length || 0;
+    const summaryCount = result.summaryStages?.length || 0;
+    const omittedCount = result.omittedStages?.length || 0;
+    const emptyCount = result.emptyStages?.length || 0;
+    const parts = [`本轮约 ${Number(result.estimatedTokens || 0).toLocaleString()} Token`];
+    if (detailCount) parts.push(`详情 ${detailCount} 阶段`);
+    if (summaryCount) parts.push(`概括 ${summaryCount} 阶段`);
+    if (omittedCount) parts.push(`因上限跳过 ${omittedCount} 阶段`);
+    if (emptyCount) parts.push(`无内容 ${emptyCount} 阶段`);
+    note.textContent = `${parts.join('，')}（上限 ${maxTokens.toLocaleString()}）`;
+    note.classList.toggle('ni-stage-budget-warning', omittedCount > 0 || result.truncated === true);
+}
+
 function syncSettingsToUI() {
     const cfg = extension_settings[EXT_NAME] || {};
     sv('#ni-clean-key',    cfg.cleanKey    || '');
@@ -751,10 +818,14 @@ function syncSettingsToUI() {
     sv('#ni-char-inj-pos', cfg.charInjPos  ?? DEFAULT_SETTINGS.charInjPos);
     sv('#ni-char-inj-depth',cfg.charInjDepth?? DEFAULT_SETTINGS.charInjDepth);
     sv('#ni-char-inj-role',cfg.charInjRole ?? DEFAULT_SETTINGS.charInjRole);
+    sv('#ni-char-page-size', cfg.charPageSize ?? DEFAULT_SETTINGS.charPageSize);
     niSyncCharAutoSleepUI();
     sv('#ni-plot-inj-pos', cfg.plotInjPos  ?? DEFAULT_SETTINGS.plotInjPos);
     sv('#ni-plot-inj-depth',cfg.plotInjDepth?? DEFAULT_SETTINGS.plotInjDepth);
     sv('#ni-plot-inj-role',cfg.plotInjRole ?? DEFAULT_SETTINGS.plotInjRole);
+    sv('#ni-plot-inj-max-tokens', cfg.plotInjMaxTokens ?? DEFAULT_SETTINGS.plotInjMaxTokens);
+    sv('#ni-stage-page-size', cfg.stagePageSize ?? DEFAULT_SETTINGS.stagePageSize);
+    niUpdateStageInjectionBudgetNote();
     sv('#ni-dev-inj-pos', cfg.devInjPos  ?? DEFAULT_SETTINGS.devInjPos);
     sv('#ni-dev-inj-depth',cfg.devInjDepth?? DEFAULT_SETTINGS.devInjDepth);
     sv('#ni-dev-inj-role',cfg.devInjRole ?? DEFAULT_SETTINGS.devInjRole);
@@ -1181,10 +1252,13 @@ function niRenderVectorCompatibilityHint() {
     }
 }
 
+let niInvalidateVectorRecallCache = () => {};
+
 async function niHandleVectorRowsChanged(rows = [], { novelKey = S.novelKey } = {}) {
     const activeNovelKey = String(S.novelKey || '');
     const inspectedNovelKey = String(novelKey || '');
     if (inspectedNovelKey !== activeNovelKey) return;
+    niInvalidateVectorRecallCache();
 
     const rowList = (rows || []).filter(Boolean);
     const fingerprints = await niSafeVectorFingerprints(rowList.map(row => row.fingerprint || ''));
@@ -1328,6 +1402,9 @@ const {
     niRenderRawDetail,
     niSaveChar,
     niSwitchCharTab,
+    niSetCharPageSize,
+    niSetCharPage,
+    niChangeCharPage,
     niRefreshCharStageSel,
     niCalcStageOnCount,
     niRenderStageDrawer,
@@ -1357,6 +1434,7 @@ const {
     niGetCharAiShowEnabled,
     niSetCharAiShowEnabled,
     niToggleCharsByStage,
+    niToggleAllStageChars,
     niToggleCharDel,
     niConfirmCharDel,
     buildStages,
@@ -1377,7 +1455,12 @@ const {
     niGenStagesManual,
     getNodesForStage,
     buildNodePills,
+    niSetAllStagesEnabled,
     niToggleStage,
+    niSetStagePageSize,
+    niSetStagePage,
+    niChangeStagePage,
+    niLoadStagePageFromChat,
     niToggleStageBody,
     niCancelStageEdit,
     niSaveStage,
@@ -1420,11 +1503,15 @@ const {
     escapeHtml: niEscHtml,
     escapeAttr: niEscAttr,
     saveSettings: niSaveSettings,
+    saveStageSettings: niSaveStageRuntimeSettings,
     saveSettingsDebounced,
     canUseDerived: canUseDerivedModules,
     callCleanApi,
     callApiSeq,
     getContext,
+    getChatMetadata: () => chat_metadata,
+    persistChatMetadata: saveMetadataDebounced,
+    hasCurrentChat: () => !!getCurrentChatId?.(),
     switchPage: niSwitchPage,
     renderVectorStageSelector: niRenderVecStageSelector,
     updateVectorOffButton: niUpdateVecOffBtn,
@@ -1445,6 +1532,7 @@ const {
     userSubStageReached: niUserSubStageReached,
     userSubAliasKey: niUserSubAliasKey,
     setTimeout: (...args) => setTimeout(...args),
+    clearTimeout: (...args) => clearTimeout(...args),
     AbortController,
 });
 
@@ -2615,7 +2703,7 @@ async function niAcquireApiRateSlot(signal = null) {
 // ============================================================
 // Embedding API 调用
 // ============================================================
-const { recallRelevantWeighted, recallRelevant } = createVectorRecallService({
+const niVectorRecallService = createVectorRecallService({
     getSettings: () => extension_settings[EXT_NAME],
     getState: () => S,
     defaultSettings: DEFAULT_SETTINGS,
@@ -2625,6 +2713,8 @@ const { recallRelevantWeighted, recallRelevant } = createVectorRecallService({
     embeddingClient: { niRequestEmbeddings, embedText },
     onVectorQueryCompared: niHandleVectorQueryCompared,
 });
+const { recallRelevantWeighted, recallRelevant } = niVectorRecallService;
+niInvalidateVectorRecallCache = niVectorRecallService.invalidateCache;
 
 // ============================================================
 // 向量召回
@@ -2895,16 +2985,17 @@ async function onPromptReady(eventData) {
         niTbReconcileCurrentNode(tbNodesForRecall);
         curTbNode = tbNodesForRecall[S.tbCurIdx] || null;
     }
-    const directStageInjectionStages = niResolveDirectStageInjectionStages({
-        rawStages,
-        transBookMode: !!extension_settings[EXT_NAME]?.transBookMode,
-        currentStageIdx: curTbNode?.stageIdx,
-        paused: !!S.tbPaused,
-    });
     const vectorRecallScope = niResolveVectorRecallStageScopes({
         enabledStages,
         stageVecDone: S.stageVecDone,
         currentStageIdx: curTbNode?.stageIdx,
+    });
+    const directStageCurrentIdx = curTbNode?.stageIdx ?? vectorRecallScope.boundaryStageIdx;
+    const directStageInjectionStages = niResolveDirectStageInjectionStages({
+        rawStages,
+        transBookMode: !!extension_settings[EXT_NAME]?.transBookMode,
+        currentStageIdx: directStageCurrentIdx,
+        paused: !!S.tbPaused,
     });
 
     if (!vectorInjectionDisabled && (
@@ -2952,59 +3043,61 @@ async function onPromptReady(eventData) {
     // ② 阶段剧情注入
     if (directStageInjectionStages.length) {
         const rawMode = niNormalizeRawInjMode(cfg.rawInjMode);
-        const plotLines = [];
         if (rawMode === 'compressed') {
             await niEnsureChunksLoaded();
         }
-
-        // 穿书模式只注入用户当前确认节点所属阶段；
-        // 其他开启阶段只保留开关状态，不能混入本轮请求。
-        for (const si of directStageInjectionStages) {
-            if (rawMode === 'compressed') {
-                // 压缩原文模式：
-                // 优先用 S.chunkStageMap收集该阶段的 chunk，
-                // 保证边界 chunk 被正确归入相邻阶段，不依赖 plot._chunkIdx 反推。
-                const chunkIdxSet = new Set();
-                if (S.chunkStageMap) {
-                    Object.entries(S.chunkStageMap).forEach(([rci, stageSet]) => {
-                        if (stageSet.has(si)) chunkIdxSet.add(Number(rci));
-                    });
+        const runtimeIndex = niBuildStageRuntimeIndex(S);
+        const maxTokens = niNormalizeRawInjectionMaxTokens(
+            cfg.plotInjMaxTokens,
+            DEFAULT_SETTINGS.plotInjMaxTokens,
+        );
+        const result = niBuildBoundedStageInjection({
+            stageIndices: directStageInjectionStages,
+            currentStageIdx: directStageCurrentIdx,
+            maxTokens: Math.max(256, maxTokens - 32),
+            getDetailText: si => {
+                if (rawMode === 'compressed') {
+                    const chunkIdxSet = runtimeIndex.chunkIdxsByStage[si] || new Set();
+                    const texts = [...chunkIdxSet].sort((a, b) => a - b).map(ci => {
+                        return (S.chunkResults[ci] && S.chunkResults[ci].trim())
+                            ? S.chunkResults[ci]
+                            : (S.chunks[ci] || '');
+                    }).filter(text => String(text || '').trim());
+                    return texts.length ? `【第 ${si} 阶段压缩原文】\n${texts.join('\n')}` : '';
                 }
-                // fallback：若 chunkStageMap 尚未生成，退回 plot._chunkIdx 反推
-                if (!chunkIdxSet.size) {
-                    (S.plots.main || []).forEach(p => {
-                        if ((p.stageIdx ?? null) === si && p._chunkIdx != null) chunkIdxSet.add(p._chunkIdx);
-                    });
-                    (S.plots.pivot || []).forEach(p => {
-                        if ((p.stageIdx ?? null) === si && p._chunkIdx != null) chunkIdxSet.add(p._chunkIdx);
-                    });
-                }
-                const texts = [...chunkIdxSet].sort((a, b) => a - b).map(ci => {
-                    return (S.chunkResults[ci] && S.chunkResults[ci].trim())
-                        ? S.chunkResults[ci]
-                        : (S.chunks[ci] || '');
-                }).filter(t => t.trim());
-                if (texts.length) {
-                    plotLines.push(`【第 ${si} 阶段压缩原文】`);
-                    plotLines.push(...texts);
-                }
-            } else {
-                // 剧情节点模式
-                const nodes = getNodesForStage(si);
+                const nodes = runtimeIndex.nodesByStage[si] || { main: [], sub: [], pivot: [] };
                 const allNodes = niMergeStageNodes(nodes);
-                if (allNodes.length) {
-                    plotLines.push(`【第 ${si} 阶段剧情节点】`);
-                    allNodes.forEach(p => {
-                        plotLines.push(`· ${p.title}：${p.body}`);
-                    });
-                }
-            }
-        }
-        if (plotLines.length) {
+                if (!allNodes.length) return '';
+                return `【第 ${si} 阶段剧情节点】\n${allNodes
+                    .map(plot => `· ${plot.title || '未命名节点'}：${plot.body || plot.content || ''}`)
+                    .join('\n')}`;
+            },
+            getSummaryText: si => {
+                const summary = String(S.stageSummaries?.[si] || '').trim();
+                return summary ? `【第 ${si} 阶段概括】\n${summary}` : '';
+            },
+        });
+
+        if (result.text) {
             const tag = rawMode === 'compressed' ? '小说压缩原文' : '小说剧情节点';
-            const plotContent = `[${tag}]\n${plotLines.join('\n')}\n[/${tag}]`;
+            const plotContent = `[${tag}]\n${result.text}\n[/${tag}]`;
+            result.estimatedTokens = Math.ceil(plotContent.length / 1.5);
             doInject(`${EXT_NAME}_plot`, plotContent, plotPos, plotDepth, plotRole);
         }
+        niUpdateStageInjectionBudgetNote(result);
+        if (result.omittedStages.length || result.truncated) {
+            console.info('[NI] 未向量阶段注入已按 Token 上限裁剪:', {
+                maxTokens,
+                injectedDetailStages: result.detailStages,
+                injectedSummaryStages: result.summaryStages,
+                omittedStages: result.omittedStages.length,
+                truncated: result.truncated,
+            });
+        }
+    } else {
+        niUpdateStageInjectionBudgetNote({
+            detailStages: [], summaryStages: [], omittedStages: [], emptyStages: [], estimatedTokens: 0,
+        });
     }
 
     // ③ 角色人设注入
@@ -3534,7 +3627,8 @@ jQuery(async () => {
         const body = document.getElementById('ni-inj-body');
         if (body) body.style.display = body.style.display === 'none' ? '' : 'none';
     });
-    $app.on('input change', '#ni-inj-depth, #ni-recall-topk, #ni-recall-thresh, #ni-vec-msg-tag, #ni-vec-msg-count, #ni-vec-inj-pos, #ni-vec-inj-role, #ni-char-inj-pos, #ni-char-inj-depth, #ni-char-inj-role, #ni-plot-inj-pos, #ni-plot-inj-depth, #ni-plot-inj-role, #ni-dev-inj-pos, #ni-dev-inj-depth, #ni-dev-inj-role, #ni-global-head-inj-pos, #ni-global-head-inj-depth, #ni-global-head-inj-role, #ni-global-tail-inj-pos, #ni-global-tail-inj-depth, #ni-global-tail-inj-role', () => niSaveSettings());
+    $app.on('input change', '#ni-inj-depth, #ni-recall-topk, #ni-recall-thresh, #ni-vec-msg-tag, #ni-vec-msg-count, #ni-vec-inj-pos, #ni-vec-inj-role, #ni-char-inj-pos, #ni-char-inj-depth, #ni-char-inj-role, #ni-plot-inj-pos, #ni-plot-inj-depth, #ni-plot-inj-role, #ni-plot-inj-max-tokens, #ni-dev-inj-pos, #ni-dev-inj-depth, #ni-dev-inj-role, #ni-global-head-inj-pos, #ni-global-head-inj-depth, #ni-global-head-inj-role, #ni-global-tail-inj-pos, #ni-global-tail-inj-depth, #ni-global-tail-inj-role', () => niSaveSettings());
+    $app.on('input change', '#ni-plot-inj-max-tokens', () => niUpdateStageInjectionBudgetNote());
     $app.on('input change', '#ni-raw-inj-mode', async function() {
         const cfg = extension_settings[EXT_NAME] || {};
         cfg.rawInjMode = niNormalizeRawInjMode(this.value);
@@ -3894,6 +3988,20 @@ jQuery(async () => {
     $app.on('click', '#ni-char-tab-row .ni-tab', function() {
         niSwitchCharTab($(this).data('role'));
     });
+    $app.on('change', '#ni-char-page-size', function() {
+        niSetCharPageSize(this.value);
+    });
+    $app.on('change', '#ni-char-page-current', function() {
+        niSetCharPage(this.value);
+    });
+    $app.on('keydown', '#ni-char-page-size, #ni-char-page-current', function(e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (this.id === 'ni-char-page-size') niSetCharPageSize(this.value);
+        else niSetCharPage(this.value);
+    });
+    $app.on('click', '#ni-char-page-prev', () => niChangeCharPage(-1));
+    $app.on('click', '#ni-char-page-next', () => niChangeCharPage(1));
     // + 添加角色：打开弹窗
     $app.on('click', '#ni-btn-add-char', () => {
         const modal = q('#ni-add-char-modal');
@@ -4084,43 +4192,19 @@ jQuery(async () => {
     $app.on('click', '#ni-drawer-toggle-empty', function(e) {
         e.preventDefault();
         e.stopPropagation();
-        const showEmptyStages = niToggleShowEmptyStages();
-        // 切换所有空阶段行的显示状态
-        const n = S.stageMapN > 0 ? S.stageMapN : 0;
-        const stageOnCount = niCalcStageOnCount();
-        for (let i = 1; i <= n; i++) {
-            const cnt = stageOnCount[i];
-            const isEmpty = !cnt || cnt.total === 0;
-            if (!isEmpty) continue;
-            const row = q(`.ni-drawer-item[data-drawer-stage="${i}"]`);
-            if (row) row.style.display = showEmptyStages ? '' : 'none';
-        }
-        niSyncEmptyToggleBtn();
+        niToggleShowEmptyStages();
+        niRenderStageDrawer();
     });
     $app.on('click', '#ni-drawer-all', function(e) {
         e.preventDefault();
         e.stopPropagation();
-        const n = S.stageMapN;
-        for (let i = 1; i <= n; i++) niToggleCharsByStage(i, true);
-        // 全选后同步 checkbox 状态并更新 note
-        for (let i = 1; i <= n; i++) {
-            const cb = q(`#ni-dchk-${i}`);
-            if (cb) cb.checked = true;
-        }
-        niUpdateStageDrawerNote();
+        niToggleAllStageChars(true);
     });
     // 阶段抽屉：全不选
     $app.on('click', '#ni-drawer-none', function(e) {
         e.preventDefault();
         e.stopPropagation();
-        const n = S.stageMapN;
-        for (let i = 1; i <= n; i++) niToggleCharsByStage(i, false);
-        // 全不选后同步 checkbox 状态并更新 note
-        for (let i = 1; i <= n; i++) {
-            const cb = q(`#ni-dchk-${i}`);
-            if (cb) cb.checked = false;
-        }
-        niUpdateStageDrawerNote();
+        niToggleAllStageChars(false);
     });
     // 阶段抽屉：单个阶段 checkbox
     $app.on('change', '.ni-drawer-item input[type=checkbox]', function(e) {
@@ -4144,19 +4228,27 @@ jQuery(async () => {
         $(cb).trigger('change');
     });
     $app.on('click', '#ni-stage-enable-all', () => {
-        const n = S.stageMapN;
-        for (let i = 1; i <= n; i++) {
-            if (!S.stageStates[i]) niToggleStage(i);
-        }
+        niSetAllStagesEnabled(true);
     });
     $app.on('click', '#ni-stage-disable-all', () => {
-        const n = S.stageMapN;
-        for (let i = 1; i <= n; i++) {
-            if (S.stageStates[i]) niToggleStage(i);
-        }
+        niSetAllStagesEnabled(false);
     });
+    $app.on('change', '#ni-stage-page-size', function() {
+        niSetStagePageSize(this.value);
+    });
+    $app.on('change', '#ni-stage-page-current', function() {
+        niSetStagePage(this.value);
+    });
+    $app.on('keydown', '#ni-stage-page-size, #ni-stage-page-current', function(e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (this.id === 'ni-stage-page-size') niSetStagePageSize(this.value);
+        else niSetStagePage(this.value);
+    });
+    $app.on('click', '#ni-stage-page-prev', () => niChangeStagePage(-1));
+    $app.on('click', '#ni-stage-page-next', () => niChangeStagePage(1));
     $app.on('click', '.ni-stg-chk', function() {
-        niToggleStage(parseInt($(this).data('stage-idx')));
+        niToggleStage(parseInt($(this).data('stage-idx')), { source: 'manual' });
     });
     $app.on('click', '.ni-stage-expand-btn', function() {
         niToggleStageBody(parseInt($(this).data('stage-idx')));
@@ -4441,8 +4533,12 @@ jQuery(async () => {
     if (event_types.CHAT_CHANGED) {
         eventSource.on(event_types.CHAT_CHANGED, () => {
             _niDetachedUserSubConfig = null;
+            niLoadStagePageFromChat({ render: true });
             niRefreshUserSubDependents({ rerenderUserSub: true });
-            setTimeout(() => niRefreshUserSubDependents({ rerenderUserSub: true }), 350);
+            setTimeout(() => {
+                niLoadStagePageFromChat({ render: true });
+                niRefreshUserSubDependents({ rerenderUserSub: true });
+            }, 350);
         });
     }
     niResetDevAutoCounter();

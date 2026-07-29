@@ -1126,7 +1126,13 @@
 }
 /* 剧情tab行右侧操作按钮*/
 .ni-plot-tab-actions { margin-left: auto; display: flex; gap: 4px; }
-.ni-plot-tab-actions .ni-char-edit-btn { padding: 2px 3px; }
+.ni-plot-tab-actions .ni-char-edit-btn,
+.ni-pm-group .ni-char-pm-btn {
+  height: 22px;
+  min-height: 22px;
+  box-sizing: border-box;
+  padding: 2px 3px;
+}
 /* 删除模式：事件卡可选中*/
 .ni-plot-del-mode .ni-plot-item,
 .ni-plot-del-mode .ni-tl-item { cursor: pointer; outline: 2px dashed var(--ni-primary-border, #DDB5C0); outline-offset: 2px; border-radius: 6px; }
@@ -1366,6 +1372,7 @@
 }
 .ni-inj-body { margin-top: 8px; }
 .ni-inj-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.ni-inj-row.ni-inj-row-single { grid-template-columns: minmax(0, 1fr); margin-top: 10px; }
 /* Accordion header*/
 .ni-inj-acc-header { display: flex; align-items: center; padding: 9px 12px; cursor: pointer; user-select: none; }
 .ni-inj-acc-left { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500; color: var(--color-text-primary); }
@@ -1870,23 +1877,6 @@
   flex-shrink: 0;
   letter-spacing: 0.02em;
 }
-
-.ni-char-pm-btn {
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
-  border: 0.5px solid var(--color-border-secondary);
-  background: transparent;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--color-text-secondary);
-  font-size: 13px;
-  padding: 0;
-  transition: background 0.12s;
-}
-.ni-char-pm-btn:hover { background: var(--color-background-secondary); }
 
 /* ── 角色 Tab 行 ──*/
 .ni-char-tab-row {
@@ -2520,6 +2510,90 @@ select.ni-modal-input {
 .ni-bulk-btn.on  { background: var(--ni-success-soft, #E1F5EE); color: var(--ni-success-text, #0F6E56); }
 .ni-bulk-btn.off { background: var(--color-background-secondary); color: var(--color-text-secondary); }
 .ni-bulk-btn:hover { opacity: .8; }
+.ni-stage-budget-note {
+  margin: -2px 0 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--color-text-tertiary);
+}
+.ni-stage-budget-note.ni-stage-budget-warning { color: var(--ni-warning-text, #C05A62); }
+.ni-list-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+.ni-list-pagination .ni-pagination-current { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.ni-list-pagination .ni-pagination-current label { margin-right: 3px; }
+.ni-list-pagination .ni-pagination-size { margin-right: auto; }
+.ni-list-pagination label { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.ni-list-pagination input {
+  field-sizing: content;
+  width: auto;
+  min-width: 14px;
+  max-width: 48px;
+  height: 18px;
+  box-sizing: border-box;
+  padding: 0 2px;
+  border: .5px solid var(--color-border-secondary);
+  border-radius: 4px;
+  background: var(--color-background-primary);
+  color: var(--color-text-primary);
+  text-align: center;
+  font-size: 11px;
+  line-height: 16px;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.ni-list-pagination input::-webkit-outer-spin-button,
+.ni-list-pagination input::-webkit-inner-spin-button { margin: 0; -webkit-appearance: none; }
+.ni-list-pagination input:focus { outline: none; border-color: var(--ni-primary-focus, #B8336A); }
+.ni-page-btn {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  padding: 0;
+  border: .5px solid var(--color-border-secondary);
+  border-radius: 4px;
+  background: var(--color-background-primary);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-size: 0;
+  line-height: 0;
+}
+.ni-page-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 5px;
+  width: 8px;
+  height: 1px;
+  background: currentColor;
+  transform: translateY(-50%);
+}
+.ni-page-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  border: solid currentColor;
+  border-width: 0 1px 1px 0;
+}
+.ni-page-btn[id$="-prev"]::after { left: 5px; transform: translateY(-50%) rotate(135deg); }
+.ni-page-btn[id$="-next"]::after { right: 5px; transform: translateY(-50%) rotate(-45deg); }
+.ni-page-btn:hover:not(:disabled) { border-color: var(--ni-primary-border, #DDB5C0); color: var(--ni-primary, #A0445E); }
+.ni-page-btn:disabled { cursor: not-allowed; opacity: .35; }
 
 /* tab + 增删行*/
 .ni-tabs-row { display: flex; align-items: center; gap: 6px; }
@@ -2562,7 +2636,8 @@ select.ni-modal-input {
   display: flex; flex-direction: column; align-items: flex-end;
   justify-content: flex-start; gap: 6px; flex-shrink: 0; padding-top: 0;
 }
-.ni-char-edit-btn {
+.ni-char-edit-btn,
+.ni-char-pm-btn {
   font-size: 11px; color: var(--color-text-secondary);
   background: transparent; border: .5px solid var(--color-border-secondary);
   border-radius: 5px; padding: 3px 7px; cursor: pointer;
@@ -2882,6 +2957,7 @@ select.ni-modal-input {
   color: #7B5EA7;
   border-color: #C9B8E8;
 }
+.ni-plot-link-btn > i { position: relative; top: 1px; }
 .ni-plot-link-btn:hover {
   background: #F3EEFF;
 }

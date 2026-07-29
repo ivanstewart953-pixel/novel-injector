@@ -388,6 +388,12 @@
                 </select>
               </div>
             </div>
+            <div class="ni-inj-row ni-inj-row-single">
+              <div class="ni-field" style="margin-bottom:0">
+                <label>单轮最多 Token <i class="ti ti-info-circle" title="未向量阶段剧情每次发送时的总注入上限。超过后优先保留当前阶段，再使用阶段概括，避免大量阶段导致酒馆卡死。"></i></label>
+                <input type="number" id="ni-plot-inj-max-tokens" value="32000" min="256" max="200000" step="500">
+              </div>
+            </div>
           </div>
 
           <!-- Accordion: 偏差注入-->
@@ -986,6 +992,14 @@
             </div>
           </div>
         </div>
+        <div class="ni-list-pagination ni-char-pagination" id="ni-char-pagination">
+          <label class="ni-pagination-size">每 <input type="number" id="ni-char-page-size" value="20" min="1" max="200" step="1" aria-label="每页角色数"> 一页</label>
+          <div class="ni-pagination-current">
+            <label>目前第 <input type="number" id="ni-char-page-current" value="1" min="1" step="1" aria-label="当前角色页码"> 页</label>
+            <button type="button" id="ni-char-page-prev" class="ni-page-btn ni-char-page-btn" title="上一页" aria-label="上一页">←</button>
+            <button type="button" id="ni-char-page-next" class="ni-page-btn ni-char-page-btn" title="下一页" aria-label="下一页">→</button>
+          </div>
+        </div>
         <div id="ni-char-list"><div class="ni-empty"><i class="ti ti-ghost"></i>清洗完成后自动生成</div></div>
       </div>
     </div>
@@ -1305,6 +1319,15 @@
           </div>
           <button class="ni-bulk-btn on" id="ni-stage-enable-all" title="开启所有阶段"><i class="ti ti-check"></i>全部开启</button>
           <button class="ni-bulk-btn off" id="ni-stage-disable-all" title="关闭所有阶段"><i class="ti ti-x"></i>全部关闭</button>
+        </div>
+        <div class="ni-stage-budget-note" id="ni-stage-inj-budget-note">未向量阶段单轮注入上限：32000 Token</div>
+        <div class="ni-list-pagination ni-stage-pagination" id="ni-stage-pagination">
+          <label class="ni-pagination-size">每 <input type="number" id="ni-stage-page-size" value="20" min="1" max="200" step="1" aria-label="每页阶段数"> 一页</label>
+          <div class="ni-pagination-current">
+            <label>目前第 <input type="number" id="ni-stage-page-current" value="1" min="1" step="1" aria-label="当前阶段页码"> 页</label>
+            <button type="button" id="ni-stage-page-prev" class="ni-page-btn ni-stage-page-btn" title="上一页" aria-label="上一页">←</button>
+            <button type="button" id="ni-stage-page-next" class="ni-page-btn ni-stage-page-btn" title="下一页" aria-label="下一页">→</button>
+          </div>
         </div>
         <div id="ni-stage-list"><div class="ni-empty"><i class="ti ti-layout-list"></i>请先在处理页完成清洗</div></div>
       </div>
