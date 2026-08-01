@@ -1246,6 +1246,14 @@
             <button class="ni-modal-confirm" id="ni-lib-save-confirm"><i class="ti ti-check"></i>保存</button>
           </div>
         </div>
+        <div class="ni-list-pagination ni-library-pagination" id="ni-lib-pagination" hidden>
+          <label class="ni-pagination-size">每 <input type="number" id="ni-lib-page-size" value="20" min="1" max="200" step="1" aria-label="每页小说数"> 一页</label>
+          <div class="ni-pagination-current">
+            <label>目前第 <input type="number" id="ni-lib-page-current" value="1" min="1" step="1" aria-label="当前小说库页码"> 页</label>
+            <button type="button" id="ni-lib-page-prev" class="ni-page-btn ni-library-page-btn" title="上一页" aria-label="上一页">←</button>
+            <button type="button" id="ni-lib-page-next" class="ni-page-btn ni-library-page-btn" title="下一页" aria-label="下一页">→</button>
+          </div>
+        </div>
         <div id="ni-lib-list" style="margin-top:8px"></div>
       </div>
 
@@ -1401,6 +1409,7 @@
 .ni-stage-opt.active{color:#c05a72;font-weight:500}
 .ni-sdot{width:5px;height:5px;border-radius:50%;background:#f5c6d8;flex-shrink:0}
 .ni-stage-opt.active .ni-sdot{background:#e8748a;box-shadow:0 0 4px rgba(232,116,138,.5)}
+.ni-pop-stage-page,.ni-pop-node-page{position:sticky;top:0;z-index:2}
 .ni-col-hd{display:flex;padding:5px 16px;font-size:9px;color:#d080a0;letter-spacing:.06em;border-bottom:1.5px solid #f5c6d8;background:linear-gradient(to right,#fff8fc,#f8f0ff,#fff8fc)}
 .ni-col-num{width:26px;flex-shrink:0}.ni-col-type{width:50px;flex-shrink:0}.ni-col-title{flex:1}.ni-col-status{width:32px;text-align:right;flex-shrink:0}
 .ni-node-list{max-height:144px;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#dbeeff #fff8fc}

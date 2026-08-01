@@ -29,6 +29,7 @@ import {
 } from '/scripts/openai.js';
 
 import {
+    NI_NOVEL_LIBRARY_PAGE_SIZE_DEFAULT,
     createStorageController,
     niEscAttr,
     niEscHtml,
@@ -73,7 +74,10 @@ import {
 import {
     NI_DEV_CURRENT_TEXT_LIMIT,
     NI_DEV_RECALL_TEXT_LIMIT,
+    NI_PLOT_PAGE_SIZE_DEFAULT,
+    NI_STAGE_SLOT_PAGE_SIZE_DEFAULT,
     NI_STAGE_PAGE_SIZE_DEFAULT,
+    NI_UNASSIGNED_PAGE_SIZE_DEFAULT,
     captureCharacterMemory,
     capturePlotCheckpointMemory,
     getAllPlotsInStoryOrder,
@@ -86,6 +90,7 @@ import {
     niBuildDeviationFactsText,
     niBuildDeviationSectionsFromAnalysis,
     niBuildStageRuntimeIndex,
+    niBuildListPaginationHtml,
     niBuildDevChatEntriesText,
     niDevIsCountableMessage,
     niDevMessageFloor,
@@ -111,6 +116,7 @@ import {
     niPlotChunkIdx,
     niPlotChunkOrder,
     niPlotManualOrder,
+    niResolveStagePagination,
     niSortPlotsByStoryOrder,
     niPlotTypeRank,
     normalizePlotCollections,
@@ -141,7 +147,11 @@ import {
     runWithSemaphore,
 } from './lib/api-system.js';
 
-import { createTransbookController } from './lib/transbook-system.js';
+import {
+    NI_TRANSBOOK_STAGE_PAGE_SIZE,
+    createTransbookController,
+    niResolveTransbookStagePagination,
+} from './lib/transbook-system.js';
 
 import {
     createGenerationController,
@@ -232,12 +242,18 @@ const DEFAULT_SETTINGS = {
     charInjRole: 0,
     charAutoSleepEnabled: true, // 开启阶段时自动休眠本阶段正文未出现的角色人设
     charPageSize: NI_STAGE_PAGE_SIZE_DEFAULT,
+    plotPageSize: NI_PLOT_PAGE_SIZE_DEFAULT,
     // 阶段剧情注入设置
     plotInjPos: 1,   // 默认聊天内
     plotInjDepth: 4,
     plotInjRole: 0,
     plotInjMaxTokens: NI_RAW_INJECTION_MAX_TOKENS_DEFAULT,
     stagePageSize: NI_STAGE_PAGE_SIZE_DEFAULT,
+    stageSlotPageSize: NI_STAGE_SLOT_PAGE_SIZE_DEFAULT,
+    unassignedPageSize: NI_UNASSIGNED_PAGE_SIZE_DEFAULT,
+    novelLibraryPageSize: NI_NOVEL_LIBRARY_PAGE_SIZE_DEFAULT,
+    transBookStagePageSize: NI_TRANSBOOK_STAGE_PAGE_SIZE,
+    transBookNodePageSize: NI_STAGE_PAGE_SIZE_DEFAULT,
     // 偏差注入设置
     devPrompt: DEV_PROMPT,
     devInjPos: 2,    // 默认主提示前，作为分支现实约束
@@ -339,7 +355,7 @@ const S = {
     stageStates: {},      // {[stageIdx]: boolean} — 是否参与向量召回
     stageSummaries: {},   // {[stageIdx]: string} — 概括
     stageTitles: {},      // {[stageIdx]: string} — 阶段标题
-    stageMap: {},         // {[chunkIdx]: stageIdx} 用户手动划分的 chunk->阶段 映射
+    stageMap: {},         // {[plotPosition]: stageIdx} 主线+转折运行时位置映射；文件中以稳定 _nodeId 持久化
     stageMapN: 0,         // 用户划分的阶段总数
 
     // 向量
@@ -517,6 +533,14 @@ function niLoadSettings() {
         saved._paginationDefault20Initialized = true;
         saveSettingsDebounced();
     }
+    if (saved._allPaginationDefault20Initialized !== true) {
+        if (Number(saved.plotPageSize) === 30) saved.plotPageSize = DEFAULT_SETTINGS.plotPageSize;
+        if (Number(saved.unassignedPageSize) === 50) saved.unassignedPageSize = DEFAULT_SETTINGS.unassignedPageSize;
+        if (Number(saved.transBookStagePageSize) === 30) saved.transBookStagePageSize = DEFAULT_SETTINGS.transBookStagePageSize;
+        if (Number(saved.transBookNodePageSize) === 40) saved.transBookNodePageSize = DEFAULT_SETTINGS.transBookNodePageSize;
+        saved._allPaginationDefault20Initialized = true;
+        saveSettingsDebounced();
+    }
     if (saved._rawInjectionDefault32000Initialized !== true) {
         if (Number(saved.plotInjMaxTokens) === 8000) {
             saved.plotInjMaxTokens = DEFAULT_SETTINGS.plotInjMaxTokens;
@@ -533,7 +557,7 @@ function niLoadSettings() {
     niUpgradeLegacyTbDefaultPrompts(saved);
     if (niUpgradeRoleplayPrompt(saved)) saveSettingsDebounced();
 
-    // 还原轻量索引
+    // 还原轻量运行状态与当前小说标识；持久化阶段索引由独立 stages 文件加载
     if (saved._stageStates) S.stageStates = saved._stageStates;
     if (saved._stageSummaries) S.stageSummaries = saved._stageSummaries;
     if (saved._stageTitles) S.stageTitles = saved._stageTitles;
@@ -556,15 +580,6 @@ function niLoadSettings() {
         });
     }
     if (saved._cleanDone != null) S.cleanDone = saved._cleanDone;
-    if (saved._stageMap) S.stageMap = saved._stageMap;
-    if (saved._stageMapN != null) S.stageMapN = saved._stageMapN;
-    if (saved._chunkStageMap) {
-        // 反序列化：value 从 Array 还原为 Set
-        S.chunkStageMap = {};
-        Object.entries(saved._chunkStageMap).forEach(([k, v]) => {
-            S.chunkStageMap[k] = new Set(v);
-        });
-    }
     if (saved._worldCategories) {
         S.worldCategories = saved._worldCategories;
     }
@@ -604,7 +619,10 @@ function niLoadSettings() {
 
     // 启动时从服务端拉取重数据
     if (S.novelKey) {
-        niServerLoadHeavy(S.novelKey, S.heavyFileKey, { chunks: false }).then(ok => {
+        niServerLoadHeavy(S.novelKey, S.heavyFileKey, {
+            chunks: false,
+            legacyStages: saved,
+        }).then(ok => {
             if (!ok) return;
             // 重数据已还原，刷新需要它的 UI
             if (canUseDerivedModules(S)) {
@@ -615,6 +633,9 @@ function niLoadSettings() {
                 }
                 niSyncCleanButtonState();
                 renderPlots(); renderCharacters(); buildStages(); niRenderWorldSettings();
+                const cfg = extension_settings[EXT_NAME] || (extension_settings[EXT_NAME] = {});
+                cfg._stageStates = { ...(S.stageStates || {}) };
+                saveSettingsDebounced();
             }
             // Bug修复④：启动拉取重数据后刷新文风 UI
             {
@@ -629,10 +650,9 @@ function niLoadSettings() {
 
     // 从 IndexedDB 反查真实向量状态，避免轻量设置里的 vecDone 与本机向量库不一致
     if (S.novelKey) {
-        niReconcileVecStateFromDb().then(changed => {
-            if (changed || S.stageMapN > 0) {
+        niReconcileVecStateFromDb().then(hasVectors => {
+            if (hasVectors || S.stageMapN > 0) {
                 buildStages();
-                niSaveSettings();
             }
         }).catch(() => {});
     }
@@ -644,12 +664,13 @@ function niLoadSettings() {
 // 文件名格式：
 // ni_<用户快照名拼音>_<随机key>_core.json
 // ni_<用户快照名拼音>_<随机key>_chunks.json
+// ni_<用户快照名拼音>_<随机key>_stages.json
 // 写：POST /api/files/upload body={name, data}
 // 读：GET /user/files/<name>
 // 删：POST /api/files/delete body={path:"user/files/<name>"}
 // ============================================================
 
-function niSaveSettings() {
+function niSaveSettings({ scheduleAutosave = true } = {}) {
     const cfg = extension_settings[EXT_NAME];
     cfg.cleanKey    = q('#ni-clean-key')?.value || cfg.cleanKey;
     cfg.cleanUrl    = q('#ni-clean-url')?.value || cfg.cleanUrl;
@@ -683,6 +704,9 @@ function niSaveSettings() {
     );
     cfg.stagePageSize = Math.max(1, Math.min(200,
         parseInt(q('#ni-stage-page-size')?.value ?? cfg.stagePageSize, 10) || DEFAULT_SETTINGS.stagePageSize
+    ));
+    cfg.novelLibraryPageSize = Math.max(1, Math.min(200,
+        parseInt(q('#ni-lib-page-size')?.value ?? cfg.novelLibraryPageSize, 10) || DEFAULT_SETTINGS.novelLibraryPageSize
     ));
     cfg.devPrompt   = q('#ni-dev-pt-content')?.value || cfg.devPrompt || DEFAULT_SETTINGS.devPrompt;
     cfg.devInjPos   = niCfgInt('#ni-dev-inj-pos', DEFAULT_SETTINGS.devInjPos);
@@ -721,10 +745,16 @@ function niSaveSettings() {
     cfg.vecConcurrency = niCfgBoundInt('#ni-vec-concurrency', DEFAULT_SETTINGS.vecConcurrency, 0, 99);
     cfg.vecBatchSize = niCfgBoundInt('#ni-vec-batch-size', DEFAULT_SETTINGS.vecBatchSize, 1, 100);
     // 持久化运行时数据
+    const nextNovelKey = S.novelKey || '';
+    if ((cfg._novelKey || '') !== nextNovelKey) {
+        delete cfg._stageMap;
+        delete cfg._stageMapN;
+        delete cfg._chunkStageMap;
+    }
     cfg._stageStates   = S.stageStates;
     cfg._stageSummaries= S.stageSummaries;
     cfg._stageTitles   = S.stageTitles;
-    cfg._novelKey      = S.novelKey;
+    cfg._novelKey      = nextNovelKey;
     cfg._heavyFileKey  = S.heavyFileKey;
     cfg._fileFingerprint = S.fileFingerprint;
     cfg._chunkKbUsed   = S.chunkKbUsed;
@@ -732,15 +762,6 @@ function niSaveSettings() {
     cfg._stageVecDone  = S.stageVecDone;
     cfg._stageVecExpected = S.stageVecExpected;
     cfg._cleanDone     = S.cleanDone;
-    cfg._stageMap      = S.stageMap;
-    cfg._stageMapN     = S.stageMapN;
-    // 序列化 chunkStageMap
-    if (S.chunkStageMap) {
-        cfg._chunkStageMap = {};
-        Object.entries(S.chunkStageMap).forEach(([k, v]) => {
-            cfg._chunkStageMap[k] = [...v];
-        });
-    }
     cfg._worldCategories = niGetWorldCategories();
     niClearLegacyDeviationSettings();
     cfg.worldInjPos   = parseInt(q('#ni-world-inj-pos')?.value)   ?? DEFAULT_SETTINGS.worldInjPos;
@@ -757,14 +778,20 @@ function niSaveSettings() {
     cfg.autoSaveEnabled = q('#ni-autosave-chk')?.checked ?? (cfg.autoSaveEnabled ?? DEFAULT_SETTINGS.autoSaveEnabled);
 
     saveSettingsDebounced();
-    niAutosave?.schedule();
+    if (scheduleAutosave) niAutosave?.schedule();
 }
 
-function niSaveStageRuntimeSettings() {
+async function niSaveStageRuntimeSettings({ saveMapping = false } = {}) {
     const cfg = extension_settings[EXT_NAME] || (extension_settings[EXT_NAME] = {});
     cfg._stageStates = { ...(S.stageStates || {}) };
-    cfg._stageMapN = S.stageMapN;
     saveSettingsDebounced();
+    if (saveMapping && S.novelKey) {
+        try {
+            await niServerSaveStages(S.novelKey, S.heavyFileKey);
+        } catch (e) {
+            console.warn('[NI] 阶段划分独立保存失败:', e);
+        }
+    }
     niAutosave?.schedule();
 }
 
@@ -825,6 +852,7 @@ function syncSettingsToUI() {
     sv('#ni-plot-inj-role',cfg.plotInjRole ?? DEFAULT_SETTINGS.plotInjRole);
     sv('#ni-plot-inj-max-tokens', cfg.plotInjMaxTokens ?? DEFAULT_SETTINGS.plotInjMaxTokens);
     sv('#ni-stage-page-size', cfg.stagePageSize ?? DEFAULT_SETTINGS.stagePageSize);
+    sv('#ni-lib-page-size', cfg.novelLibraryPageSize ?? DEFAULT_SETTINGS.novelLibraryPageSize);
     niUpdateStageInjectionBudgetNote();
     sv('#ni-dev-inj-pos', cfg.devInjPos  ?? DEFAULT_SETTINGS.devInjPos);
     sv('#ni-dev-inj-depth',cfg.devInjDepth?? DEFAULT_SETTINGS.devInjDepth);
@@ -1480,6 +1508,8 @@ const {
     niConfirmStageMap,
     niSetCurrentPlotTab,
     niGetCurrentPlotTab,
+    niSetPlotPageForPosition,
+    niGetPlotPage,
     niIsPlotInteractionModeActive,
     niTogglePlotDeleteSelection,
     niGetCurrentCharTab,
@@ -1544,14 +1574,20 @@ const {
     niServerLoadJsonByNames,
     niApplyHeavyCore,
     niApplyHeavyChunks,
+    niApplyStages,
     niHasLoadedChunks,
     niServerSaveHeavy,
+    niServerSaveStages,
     niServerLoadHeavy,
+    niServerLoadStages,
     niEnsureChunksLoaded,
     niBuildStagesWithChunksIfNeeded,
     niServerDeleteHeavy,
     _niStripHeavy,
     niRenderNovelLibrary,
+    niSetNovelLibraryPageSize,
+    niSetNovelLibraryPage,
+    niChangeNovelLibraryPage,
     niSaveNovelSnapshot,
     niUpdateNovelSnapshot,
     niRenameNovelSnapshot,
@@ -1573,6 +1609,7 @@ const {
     getRequestHeaders,
     normalizePlotCollections,
     niSyncSubPlotStageAssignments,
+    niEnsurePlotNodeId,
     niMaybeMigrateLegacyDeviationToChat: (...args) => niMaybeMigrateLegacyDeviationToChat(...args),
     buildStages,
     canUseDerivedModules,
@@ -1763,6 +1800,8 @@ const {
     ensurePlotNodeId: niEnsurePlotNodeId,
     comparePlotOrder: niComparePlotOrder,
     saveSettingsDebounced,
+    normalizePageSize: niNormalizeStagePageSize,
+    buildListPaginationHtml: niBuildListPaginationHtml,
     callCleanApi,
     applyStatusbarTheme: niApplyStatusbarTheme,
     applyUserSubstitution: niApplyUserSubstitution,
@@ -3748,6 +3787,8 @@ jQuery(async () => {
         const page = $(this).data('page');
         if (page) {
             niSwitchPage(page, this);
+            if (page === 'plot') renderPlots({ force: true });
+            if (page === 'char') renderCharacters({ force: true });
             // 切换到阶段页时强制刷新，确保向量化状态标签实时更新
             if (page === 'stage') niBuildStagesWithChunksIfNeeded();
         }
@@ -3899,9 +3940,13 @@ jQuery(async () => {
     $app.on('click', '#ni-plot-del-btn', () => niTogglePlotDel());
     // 删除确认/取消
     $app.on('click', '#ni-plot-del-cancel', () => niTogglePlotDel());
-    $app.on('click', '#ni-plot-del-confirm', () => niConfirmPlotDel());
+    $app.on('click', '#ni-plot-del-confirm', () => {
+        niConfirmPlotDel();
+    });
     // modal 保存/取消
-    $app.on('click', '#ni-plot-modal-save', () => niSavePlotModal());
+    $app.on('click', '#ni-plot-modal-save', () => {
+        niSavePlotModal();
+    });
     $app.on('click', '#ni-plot-modal-cancel', () => niClosePlotModal());
     // modal 点背景关闭
     $app.on('click', '#ni-plot-modal', function(e) {
@@ -3972,7 +4017,10 @@ jQuery(async () => {
     $app.on('click', '#ni-sp-ai-btn',     () => niAutoStageByPivot());
     $app.on('click', '.ni-sp-add-btn',    () => niAddStageSlot());
     $app.on('click', '.ni-sp-cancel-btn', () => niCloseStagePanel());
-    $app.on('click', '#ni-sp-confirm-btn',() => niConfirmStageMap());
+    $app.on('click', '#ni-sp-confirm-btn',() => {
+        niConfirmStageMap();
+        void niSaveStageRuntimeSettings({ saveMapping: true });
+    });
 
     // 阶段/角色 AI 生成按钮
     $app.on('click', '#ni-btn-gen-chars',  () => niGenCharsManual());
@@ -4091,14 +4139,18 @@ jQuery(async () => {
     // Timeline branch link: jump to sub tab and expand that sub plot
     $app.on('click', '.ni-tl-branch-link', function() {
         const subIdx = parseInt($(this).data('sub-idx'));
+        if (!Number.isFinite(subIdx) || subIdx < 0) return;
+        const targetPage = niSetPlotPageForPosition('sub', subIdx, { render: false });
         const subTabBtn = q('#ni-pg-plot .ni-plot-tab-row .ni-tab[data-tab="sub"]');
         niSwitchTab('sub', subTabBtn);
         setTimeout(() => {
+            if (niGetPlotPage('sub') !== targetPage) return;
             const items = qa('#ni-tp-sub .ni-plot-item');
             items.forEach(el => el.classList.remove('open'));
-            if (items[subIdx]) {
-                items[subIdx].classList.add('open');
-                items[subIdx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            const target = q(`#ni-tp-sub .ni-plot-item[data-plot-pos="${subIdx}"]`);
+            if (target) {
+                target.classList.add('open');
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         }, 60);
     });
@@ -4176,6 +4228,7 @@ jQuery(async () => {
         const isOpen = panel.classList.toggle('open');
         trigger.classList.toggle('open', isOpen);
         if (isOpen) niRenderStageDrawer();
+        else q('#ni-drawer-list')?.replaceChildren();
     });
     // 阶段抽屉：点击外部关闭
     $(document).on('click.ni-drawer', function(e) {
@@ -4185,6 +4238,7 @@ jQuery(async () => {
         if (drawer && !drawer.contains(e.target)) {
             panel.classList.remove('open');
             q('#ni-drawer-trigger')?.classList.remove('open');
+            q('#ni-drawer-list')?.replaceChildren();
         }
     });
     // 阶段抽屉：全选
@@ -4442,6 +4496,20 @@ jQuery(async () => {
     $app.on('click', '.ni-lib-rename-btn', function() {
         niRenameNovelSnapshot(parseInt($(this).data('lib-idx')));
     });
+    $app.on('change', '#ni-lib-page-size', function() {
+        niSetNovelLibraryPageSize(this.value);
+    });
+    $app.on('change', '#ni-lib-page-current', function() {
+        niSetNovelLibraryPage(this.value);
+    });
+    $app.on('keydown', '#ni-lib-page-size, #ni-lib-page-current', function(e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (this.id === 'ni-lib-page-size') niSetNovelLibraryPageSize(this.value);
+        else niSetNovelLibraryPage(this.value);
+    });
+    $app.on('click', '#ni-lib-page-prev', () => niChangeNovelLibraryPage(-1));
+    $app.on('click', '#ni-lib-page-next', () => niChangeNovelLibraryPage(1));
 
     // 导入/导出
     $app.on('click', '#ni-export-btn', () => niExportData());
@@ -4502,7 +4570,7 @@ jQuery(async () => {
 
     // 切换到设置页时刷新小说库和缓存信息
     $app.on('click', '.ni-nav-btn[data-page="settings"]', () => {
-        niRenderNovelLibrary();
+        niRenderNovelLibrary({ force: true });
 
     });
 
@@ -4533,7 +4601,7 @@ jQuery(async () => {
     if (event_types.CHAT_CHANGED) {
         eventSource.on(event_types.CHAT_CHANGED, () => {
             _niDetachedUserSubConfig = null;
-            niLoadStagePageFromChat({ render: true });
+            niLoadStagePageFromChat();
             niRefreshUserSubDependents({ rerenderUserSub: true });
             setTimeout(() => {
                 niLoadStagePageFromChat({ render: true });
@@ -4762,13 +4830,57 @@ console.log('[NI-TB] 穿书模式模块已加载');
     let _popInferExp = true;
     let _popStageOpen = false;
     let _popCurIdx = 0;   // 当前节点索引
+    let _popStagePage = 1;
+    let _popNodePage = 1;
+    const NI_POP_NODE_PAGE_SIZE = NI_STAGE_PAGE_SIZE_DEFAULT;
+
+    function niPopGetStagePageSize() {
+        const cfg = extension_settings[EXT_NAME] || {};
+        return niNormalizeStagePageSize(cfg.transBookStagePageSize, DEFAULT_SETTINGS.transBookStagePageSize || NI_TRANSBOOK_STAGE_PAGE_SIZE);
+    }
+
+    function niPopGetNodePageSize() {
+        const cfg = extension_settings[EXT_NAME] || {};
+        return niNormalizeStagePageSize(cfg.transBookNodePageSize, DEFAULT_SETTINGS.transBookNodePageSize || NI_POP_NODE_PAGE_SIZE);
+    }
+
+    function niPopSetStagePageSize(value) {
+        const cfg = extension_settings[EXT_NAME] || (extension_settings[EXT_NAME] = {});
+        cfg.transBookStagePageSize = niNormalizeStagePageSize(value, cfg.transBookStagePageSize || DEFAULT_SETTINGS.transBookStagePageSize || NI_TRANSBOOK_STAGE_PAGE_SIZE);
+        _popStagePage = 1;
+        saveSettingsDebounced();
+        const latest = niPopGetState();
+        const view = niPopGetStageView(latest.nodes, latest.viewIdx);
+        niPopBuildStages(latest.stages, view.stageIdx);
+        return cfg.transBookStagePageSize;
+    }
+
+    function niPopSetNodePageSize(value) {
+        const cfg = extension_settings[EXT_NAME] || (extension_settings[EXT_NAME] = {});
+        cfg.transBookNodePageSize = niNormalizeStagePageSize(value, cfg.transBookNodePageSize || DEFAULT_SETTINGS.transBookNodePageSize || NI_POP_NODE_PAGE_SIZE);
+        _popNodePage = 1;
+        saveSettingsDebounced();
+        const latest = niPopGetState();
+        const view = niPopGetStageView(latest.nodes, latest.viewIdx);
+        niPopBuildNodes(view.nodes, latest.viewIdx, { alignActive: false });
+        return cfg.transBookNodePageSize;
+    }
 
     // ── 从主插件数据拉取节点/阶段信息 ──
     function niPopGetState() {
         // 优先通过主模块暴露的函数读取
+        if (typeof window.niCreateTbSnapshot === 'function') {
+            const snapshot = window.niCreateTbSnapshot();
+            const nodes  = snapshot?.nodes || [];
+            const stages = snapshot?.stages || [];
+            const S      = window._niS;
+            const curIdx = (S && typeof S.tbCurIdx === 'number') ? S.tbCurIdx : _popCurIdx;
+            const viewIdx = (S && typeof S.tbViewIdx === 'number') ? S.tbViewIdx : curIdx;
+            return { nodes, stages, curIdx, viewIdx };
+        }
         if (typeof window.niGetTbNodes === 'function' && typeof window.niGetTbStages === 'function') {
             const nodes  = window.niGetTbNodes();
-            const stages = window.niGetTbStages();
+            const stages = window.niGetTbStages(nodes);
             const S      = window._niS;
             const curIdx = (S && typeof S.tbCurIdx === 'number') ? S.tbCurIdx : _popCurIdx;
             const viewIdx = (S && typeof S.tbViewIdx === 'number') ? S.tbViewIdx : curIdx;
@@ -4807,39 +4919,69 @@ console.log('[NI-TB] 穿书模式模块已加载');
     }
 
     // ── 渲染阶段下拉 ──
-    function niPopBuildStages(stages, curStageIdx) {
+    function niPopSyncStageValue(stages, curStageIdx) {
+        const val = q('ni-pop-stage-val');
+        if (!val) return;
+        const current = (stages || []).find(stage => stage.enabled !== false && Number(stage.stageIdx) === Number(curStageIdx));
+        val.textContent = current?.title || current?.name || (current ? `阶段 ${current.stageIdx}` : '—');
+    }
+
+    function niPopBuildStages(stages, curStageIdx, { alignActive = false } = {}) {
         const drop = q('ni-pop-stage-drop');
-        const val  = q('ni-pop-stage-val');
         if (!drop) return;
-        drop.innerHTML = '';
-        const active = stages.filter(s => s.enabled !== false);
-        active.forEach((s, i) => {
-            const el = document.createElement('div');
-            el.className = 'ni-stage-opt' + (i === curStageIdx ? ' active' : '');
-            el.innerHTML = '<span class="ni-sdot"></span>' + niPopEsc(s.title || s.name || ('阶段 ' + (i+1)));
-            el.addEventListener('click', e => {
-                e.stopPropagation();
-                const { nodes } = niPopGetState();
-                const firstIdx = nodes.findIndex(n => n.stageIdx === s.stageIdx);
-                if (firstIdx >= 0 && !niPopCommitCurrentIdx(firstIdx, nodes, { archivePrior: true })) return;
-                _popStageOpen = false;
-                drop.classList.remove('vis');
-                const arrow = q('ni-pop-stage-arrow')?.querySelector('span');
-                if (arrow) arrow.className = 'ni-arr-ds';
-                niPopRender();
-            });
-            drop.appendChild(el);
+        const active = (stages || []).filter(s => s.enabled !== false);
+        const pagination = niResolveTransbookStagePagination(active, {
+            page: _popStagePage,
+            pageSize: niPopGetStagePageSize(),
+            activeStageIdx: curStageIdx,
+            alignActive,
         });
-        const cur = active[curStageIdx];
-        if (val && cur) val.textContent = cur.title || cur.name || '阶段 ' + (curStageIdx+1);
+        _popStagePage = pagination.page;
+        const pagerHtml = niBuildListPaginationHtml({
+            pagination,
+            idPrefix: 'ni-pop-stage-page',
+            wrapperClass: 'ni-pop-stage-page',
+            sizeInputClass: 'ni-pop-stage-page-size',
+            pageInputClass: 'ni-pop-stage-page-current',
+            pageButtonClass: 'ni-pop-stage-page-btn',
+            sizeAriaLabel: '每页小票阶段数',
+            pageAriaLabel: '当前小票阶段页码',
+        });
+        drop.innerHTML = pagerHtml + pagination.items.map(stage =>
+            `<div class="ni-stage-opt${Number(stage.stageIdx) === Number(curStageIdx) ? ' active' : ''}" data-stage-idx="${stage.stageIdx}">
+              <span class="ni-sdot"></span>${niPopEsc(stage.title || stage.name || `阶段 ${stage.stageIdx}`)}
+            </div>`
+        ).join('');
+        niPopSyncStageValue(active, curStageIdx);
     }
 
     // ── 渲染节点列表 ──
-    function niPopBuildNodes(nodes, curIdx) {
+    function niPopBuildNodes(nodes, curIdx, { alignActive = false } = {}) {
         const list = q('ni-pop-node-list');
         if (!list) return;
         list.innerHTML = '';
-        nodes.forEach((n, i) => {
+        const activeLocalIdx = Math.max(0, nodes.findIndex(node => (node._globalIdx ?? -1) === curIdx));
+        const nodePageSize = niPopGetNodePageSize();
+        if (alignActive) _popNodePage = Math.floor(activeLocalIdx / nodePageSize) + 1;
+        const pagination = niResolveStagePagination({
+            total: nodes.length,
+            page: _popNodePage,
+            pageSize: nodePageSize,
+        });
+        _popNodePage = pagination.page;
+        const pagerHtml = niBuildListPaginationHtml({
+            pagination,
+            idPrefix: 'ni-pop-node-page',
+            wrapperClass: 'ni-pop-node-page',
+            sizeInputClass: 'ni-pop-node-page-size',
+            pageInputClass: 'ni-pop-node-page-current',
+            pageButtonClass: 'ni-pop-node-page-btn',
+            sizeAriaLabel: '每页小票节点数',
+            pageAriaLabel: '当前小票节点页码',
+        });
+        if (pagerHtml) list.insertAdjacentHTML('beforeend', pagerHtml);
+        nodes.slice(pagination.startIndex, pagination.endIndex).forEach((n, pageIdx) => {
+            const i = pagination.startIndex + pageIdx;
             const gi = n._globalIdx ?? i;
             const typeMap = { main:'main', sub:'sub', pivot:'pivot', 支线:'sub', 主线:'main', 关键转折:'pivot' };
             const typeKey = typeMap[n.type] || 'main';
@@ -5024,7 +5166,7 @@ console.log('[NI-TB] 穿书模式模块已加载');
             window.niTbSetViewIdx(newIdx, nodes, { render: true });
             _popCurIdx = newIdx;
         }
-        niPopRender();
+        niPopRender({ alignStagePage: true, alignNodePage: true });
         // 滚动到新节点
         requestAnimationFrame(() => {
             const r = q('ni-pop-nr' + newIdx);
@@ -5035,15 +5177,19 @@ console.log('[NI-TB] 穿书模式模块已加载');
     }
 
     // ── 主渲染 ──
-    function niPopRender() {
+    function niPopRender({ alignStagePage = false, alignNodePage = true } = {}) {
         const { nodes, stages, viewIdx } = niPopGetState();
         // 弹窗展示预览节点；后台注入继续使用用户在节点列表中确认的节点。
         _popCurIdx = Number.isInteger(viewIdx) && viewIdx >= 0 && viewIdx < nodes.length ? viewIdx : 0;
         const view = niPopGetStageView(nodes, _popCurIdx);
-        const activeStages = stages.filter(s => s.enabled !== false);
-        const curStageLocalIdx = Math.max(0, activeStages.findIndex(s => s.stageIdx === view.stageIdx));
-        niPopBuildStages(stages, curStageLocalIdx);
-        niPopBuildNodes(view.nodes, _popCurIdx);
+        niPopSyncStageValue(stages, view.stageIdx);
+        const stageDrop = q('ni-pop-stage-drop');
+        if (_popStageOpen) {
+            niPopBuildStages(stages, view.stageIdx, { alignActive: alignStagePage });
+        } else if (stageDrop) {
+            stageDrop.innerHTML = '';
+        }
+        niPopBuildNodes(view.nodes, _popCurIdx, { alignActive: alignNodePage });
         niPopSyncFt(view.nodes);
         niPopSyncNav(view.nodes, _popCurIdx);
         niPopSyncSub(nodes, stages, _popCurIdx);
@@ -5054,9 +5200,7 @@ console.log('[NI-TB] 穿书模式模块已加载');
     // ── 弹窗开关 ──
     function niPopOpen() {
         _popOpen = true;
-        // 每次打开时同步当前预览节点；预览不会改写后台注入节点。
-        const { viewIdx } = niPopGetState();
-        _popCurIdx = viewIdx;
+        // 主渲染会用同一份快照同步当前预览节点；预览不会改写后台注入节点。
         const fab = q('ni-fab'), panel = q('ni-popup-panel'), overlay = q('ni-popup-overlay');
         if (fab) fab.classList.add('open');
         if (panel) { panel.style.display = 'flex'; requestAnimationFrame(() => panel.classList.add('vis')); }
@@ -5074,16 +5218,23 @@ console.log('[NI-TB] 穿书模式模块已加载');
             wrap.style.justifyContent = 'center';
             wrap.style.pointerEvents = 'auto';
         }
-        niPopRender();
+        niPopRender({ alignNodePage: true });
         if (typeof window.niTbSyncPauseUI === 'function') window.niTbSyncPauseUI();
     }
     function niPopClose() {
         _popOpen = false;
+        _popStageOpen = false;
         const fab = q('ni-fab'), panel = q('ni-popup-panel'), overlay = q('ni-popup-overlay');
         if (fab) fab.classList.remove('open');
         if (panel) { panel.classList.remove('vis'); setTimeout(() => { panel.style.display = 'none'; }, 380); }
         if (overlay) overlay.style.display = 'none';
-        q('ni-popup-wrap').style.pointerEvents = 'none';
+        const wrap = q('ni-popup-wrap');
+        if (wrap) wrap.style.pointerEvents = 'none';
+        const stageDrop = q('ni-pop-stage-drop');
+        if (stageDrop) {
+            stageDrop.classList.remove('vis');
+            stageDrop.innerHTML = '';
+        }
     }
     window.niPopOpen  = niPopOpen;
     window.niPopClose = niPopClose;
@@ -5169,15 +5320,121 @@ console.log('[NI-TB] 穿书模式模块已加载');
 
         q('ni-pop-stage-row')?.addEventListener('click', () => {
             // 弹窗可能持续打开；展开阶段选择前重新读取主模块的最新状态。
-            const latest = niPopGetState();
-            if (Number.isInteger(latest.viewIdx) && latest.viewIdx >= 0 && latest.viewIdx < latest.nodes.length) {
-                _popCurIdx = latest.viewIdx;
-            }
-            niPopRender();
             _popStageOpen = !_popStageOpen;
+            if (_popStageOpen) niPopRender({ alignStagePage: true, alignNodePage: true });
+            else {
+                const drop = q('ni-pop-stage-drop');
+                if (drop) drop.innerHTML = '';
+            }
             q('ni-pop-stage-drop')?.classList.toggle('vis', _popStageOpen);
             const arrow = q('ni-pop-stage-arrow')?.querySelector('span');
             if (arrow) arrow.className = _popStageOpen ? 'ni-arr-us' : 'ni-arr-ds';
+        });
+
+        q('ni-pop-stage-drop')?.addEventListener('click', e => {
+            e.stopPropagation();
+            const pageBtn = e.target.closest('.ni-pop-stage-page-btn');
+            if (pageBtn && !pageBtn.disabled) {
+                const page = parseInt(pageBtn.dataset.page, 10);
+                if (Number.isFinite(page)) _popStagePage = page;
+                const latest = niPopGetState();
+                const view = niPopGetStageView(latest.nodes, latest.viewIdx);
+                niPopBuildStages(latest.stages, view.stageIdx);
+                q('ni-pop-stage-drop')?.classList.add('vis');
+                return;
+            }
+            const option = e.target.closest('.ni-stage-opt[data-stage-idx]');
+            if (!option) return;
+            const stageIdx = Number(option.dataset.stageIdx);
+            const { nodes } = niPopGetState();
+            const firstIdx = nodes.findIndex(node => Number(node.stageIdx) === stageIdx);
+            if (firstIdx >= 0 && !niPopCommitCurrentIdx(firstIdx, nodes, { archivePrior: true })) return;
+            _popStageOpen = false;
+            const drop = q('ni-pop-stage-drop');
+            if (drop) {
+                drop.classList.remove('vis');
+                drop.innerHTML = '';
+            }
+            const arrow = q('ni-pop-stage-arrow')?.querySelector('span');
+            if (arrow) arrow.className = 'ni-arr-ds';
+            niPopRender({ alignStagePage: true, alignNodePage: true });
+        });
+        q('ni-pop-stage-drop')?.addEventListener('change', e => {
+            const target = e.target;
+            if (target?.classList?.contains('ni-pop-stage-page-size')) {
+                niPopSetStagePageSize(target.value);
+            } else if (target?.classList?.contains('ni-pop-stage-page-current')) {
+                const latest = niPopGetState();
+                const view = niPopGetStageView(latest.nodes, latest.viewIdx);
+                const active = (latest.stages || []).filter(stage => stage.enabled !== false);
+                _popStagePage = niResolveTransbookStagePagination(active, {
+                    page: target.value,
+                    pageSize: niPopGetStagePageSize(),
+                }).page;
+                niPopBuildStages(latest.stages, view.stageIdx);
+            }
+        });
+        q('ni-pop-stage-drop')?.addEventListener('keydown', e => {
+            if (e.key !== 'Enter') return;
+            const target = e.target;
+            if (!target?.classList?.contains('ni-pop-stage-page-size') && !target?.classList?.contains('ni-pop-stage-page-current')) return;
+            e.preventDefault();
+            if (target.classList.contains('ni-pop-stage-page-size')) niPopSetStagePageSize(target.value);
+            else {
+                const latest = niPopGetState();
+                const view = niPopGetStageView(latest.nodes, latest.viewIdx);
+                const active = (latest.stages || []).filter(stage => stage.enabled !== false);
+                _popStagePage = niResolveTransbookStagePagination(active, {
+                    page: target.value,
+                    pageSize: niPopGetStagePageSize(),
+                }).page;
+                niPopBuildStages(latest.stages, view.stageIdx);
+            }
+        });
+
+        q('ni-pop-node-list')?.addEventListener('click', e => {
+            const pageBtn = e.target.closest('.ni-pop-node-page-btn');
+            if (!pageBtn || pageBtn.disabled) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const page = parseInt(pageBtn.dataset.page, 10);
+            if (!Number.isFinite(page)) return;
+            _popNodePage = page;
+            const latest = niPopGetState();
+            const view = niPopGetStageView(latest.nodes, latest.viewIdx);
+            niPopBuildNodes(view.nodes, latest.viewIdx, { alignActive: false });
+        });
+        q('ni-pop-node-list')?.addEventListener('change', e => {
+            const target = e.target;
+            if (target?.classList?.contains('ni-pop-node-page-size')) {
+                niPopSetNodePageSize(target.value);
+            } else if (target?.classList?.contains('ni-pop-node-page-current')) {
+                const latest = niPopGetState();
+                const view = niPopGetStageView(latest.nodes, latest.viewIdx);
+                _popNodePage = niResolveStagePagination({
+                    total: view.nodes.length,
+                    page: target.value,
+                    pageSize: niPopGetNodePageSize(),
+                }).page;
+                niPopBuildNodes(view.nodes, latest.viewIdx, { alignActive: false });
+            }
+        });
+        q('ni-pop-node-list')?.addEventListener('keydown', e => {
+            if (e.key !== 'Enter') return;
+            const target = e.target;
+            if (!target?.classList?.contains('ni-pop-node-page-size') && !target?.classList?.contains('ni-pop-node-page-current')) return;
+            e.preventDefault();
+            if (target.classList.contains('ni-pop-node-page-size')) niPopSetNodePageSize(target.value);
+            else {
+                const latest = niPopGetState();
+                const view = niPopGetStageView(latest.nodes, latest.viewIdx);
+                _popNodePage = niResolveStagePagination({
+                    total: view.nodes.length,
+                    page: target.value,
+                    pageSize: niPopGetNodePageSize(),
+                }).page;
+                niPopBuildNodes(view.nodes, latest.viewIdx, { alignActive: false });
+            }
         });
 
         const niPopMoveInStage = (delta) => {

@@ -20,6 +20,7 @@ Novel Injector 是一个 SillyTavern 第三方扩展，用于把长篇小说整�
 - 支持“穿书模式”，在剧情页管理当前节点、归档进度、推演后续行动方向。
 - 支持外观配色主题，用户可通过颜色选择器或十六进制文本框调整主色、次色、强调、警示、背景和文字色，也可导入、导出和保存主题。
 - 支持小说库快照、ZIP 导入导出、旧 JSON 导入、向量缓存清理和全量清理。
+- 小说库与长列表统一使用轻量分页：默认每页 20 项、最多 200 项，只生成当前页 DOM，兼顾大量阶段和手机端操作。
 
 ## 安装
 
@@ -233,8 +234,9 @@ README.md
 - 修补支线关联。
 - 支线编辑时选择关联的主线或转折剧情。
 - 点击时间轴支线链接跳转到支线页。
+- 时间轴、主线、支线和关键转折列表统一分页，默认每页 20 个、最多 200 个；隐藏的剧情 Tab 不预生成节点 DOM。
 
-剧情页还提供阶段划分面板，可以新建阶段、分配节点、查看未分配节点，并支持按转折点自动划分。
+剧情页还提供阶段划分面板，可以新建阶段、分配节点、查看未分配节点，并支持按转折点自动划分。阶段卡和未分配节点使用同款分页器，只生成当前页内容；阶段卡默认折叠，已分配节点仅在展开时生成。
 
 ## 角色页
 
@@ -405,6 +407,7 @@ NovelInjectorVectors
 - 更新快照。
 - 重命名快照。
 - 删除快照及对应重数据。
+- 使用与阶段页相同的分页栏：左侧“每…一页”，右侧“目前第…页”和 `←`、`→`；默认每页 20 本、最多 200 本，只生成当前页书卡。
 
 ### 导入导出
 
@@ -444,6 +447,7 @@ NovelInjectorVectors
 | 轻量设置、API 配置、小说库索引、阶段开关、世界分类索引 | SillyTavern `extension_settings` |
 | 剧情节点、角色人设、角色称呼、分段 meta、清洗状态、文风正文、当前偏差 | SillyTavern `user/files` 下的 `*_core.json` |
 | 清洗压缩正文 | SillyTavern `user/files` 下的 `*_chunks.json` |
+| 持久化阶段索引（稳定 `_nodeId → stageIdx` 映射及分段关联） | SillyTavern `user/files` 下的 `*_stages.json` |
 | 向量索引 | 浏览器 IndexedDB：`NovelInjectorVectors` |
 | 穿书节点进度 | 当前聊天首条消息上的 `ni_tb` 数据 |
 | 用户代入开关、方式、角色与称呼配置 | 当前聊天的 `chat_metadata.novelInjectorUserSub` |
@@ -453,9 +457,10 @@ NovelInjectorVectors
 ```text
 ni_<快照名拼音>_<随机key>_core.json
 ni_<快照名拼音>_<随机key>_chunks.json
+ni_<快照名拼音>_<随机key>_stages.json
 ```
 
-这样做是为了兼容 SillyTavern 文件接口和跨设备迁移。
+`core/chunks` 保存清洗多步骤完成后的小说事实数据；`stages` 只保存可长期复用的持久化阶段索引，不另建内容版本体系。加载时会先恢复 core，再按稳定节点 ID 合并阶段索引；core 缺失或损坏时不会用空工作区回写覆盖 stages。这样做是为了兼容 SillyTavern 文件接口和跨设备迁移。
 
 ## 常见问题
 
@@ -518,6 +523,7 @@ novel-injector/
 ├─ README.md
 └─ lib/
    ├─ api-system.js
+   ├─ autosave-system.js
    ├─ cleaning-system.js
    ├─ prompts.js
    ├─ storage-system.js
