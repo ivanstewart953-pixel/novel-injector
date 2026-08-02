@@ -2583,6 +2583,9 @@ select.ni-modal-input {
 .ni-list-pagination input:focus { outline: none; border-color: var(--ni-primary-focus, #B8336A); }
 .ni-page-btn {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 18px;
   height: 18px;
   box-sizing: border-box;
@@ -2590,34 +2593,24 @@ select.ni-modal-input {
   border: .5px solid var(--color-border-secondary);
   border-radius: 4px;
   background: var(--color-background-primary);
-  color: var(--color-text-primary);
+  color: var(--color-text-secondary);
   cursor: pointer;
   font-size: 0;
   line-height: 0;
 }
 .ni-page-btn::before {
   content: '';
-  position: absolute;
-  top: 50%;
-  left: 5px;
-  width: 8px;
-  height: 1px;
+  display: block;
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
   background: currentColor;
-  transform: translateY(-50%);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M1 5h8M6.5 2.5L9 5 6.5 7.5' fill='none' stroke='black' stroke-width='.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M1 5h8M6.5 2.5L9 5 6.5 7.5' fill='none' stroke='black' stroke-width='.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
 }
-.ni-page-btn::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  width: 4px;
-  height: 4px;
-  border: solid currentColor;
-  border-width: 0 1px 1px 0;
-}
-.ni-page-btn[id$="-prev"]::after,
-.ni-page-btn.ni-page-prev::after { left: 5px; transform: translateY(-50%) rotate(135deg); }
-.ni-page-btn[id$="-next"]::after,
-.ni-page-btn.ni-page-next::after { right: 5px; transform: translateY(-50%) rotate(-45deg); }
+.ni-page-btn[id$="-prev"]::before,
+.ni-page-btn.ni-page-prev::before { transform: scaleX(-1); }
+.ni-page-btn::after { content: none; }
 .ni-page-btn:hover:not(:disabled) { border-color: var(--ni-primary-border, #DDB5C0); color: var(--ni-primary, #A0445E); }
 .ni-page-btn:disabled { cursor: not-allowed; opacity: .35; }
 
