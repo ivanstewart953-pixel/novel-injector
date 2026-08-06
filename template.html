@@ -891,7 +891,20 @@
           <div class="ni-api-panel" id="ni-user-sub-panel">
             <div class="ni-user-sub-grid">
               <label class="ni-cef-label">代入角色</label>
-              <select class="ni-cef-input ni-cef-select" id="ni-user-sub-char"></select>
+              <div class="ni-char-picker" id="ni-user-sub-char-picker">
+                <input type="hidden" id="ni-user-sub-char" value="">
+                <button type="button" class="ni-modal-input ni-char-picker-toggle" id="ni-user-sub-char-toggle" aria-haspopup="listbox" aria-expanded="false">
+                  <span id="ni-user-sub-char-label">选择角色</span>
+                  <i class="ti ti-chevron-down"></i>
+                </button>
+                <div class="ni-char-picker-panel" id="ni-user-sub-char-panel" style="display:none">
+                  <div class="ni-char-picker-search">
+                    <i class="ti ti-search"></i>
+                    <input id="ni-user-sub-char-search" placeholder="输入角色姓名中的一个字…" autocomplete="off">
+                  </div>
+                  <div class="ni-char-picker-list" id="ni-user-sub-char-list" role="listbox"></div>
+                </div>
+              </div>
             </div>
             <div class="ni-user-sub-grid ni-user-sub-mode-grid">
               <label class="ni-cef-label">代入方式</label>

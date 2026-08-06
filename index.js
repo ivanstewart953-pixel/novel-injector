@@ -2369,11 +2369,10 @@ function niRenderUserSubUI() {
         btn.setAttribute('aria-pressed', String(isOn));
     });
 
-    const selectedIdx = cfg.userSubCharIdx ?? '';
-    sel.innerHTML = '<option value="">选择角色</option>' +
-        (S.characters || []).map((c, i) =>
-            `<option value="${i}"${String(selectedIdx) === String(i) ? ' selected' : ''}>${niEscHtml(c.name || `角色${i + 1}`)}</option>`
-        ).join('');
+    // 从配置同步当前选择，保证切换聊天/页面后选中状态不丢失
+    sel.value = cfg.userSubCharIdx ?? '';
+    niRenderUserSubCharPicker('');
+    niUpdateUserSubCharLabel();
 
     niNormalizeUserSubAliasesForSelectedChar(cfg);
     const aliases = (cfg.userSubAliases || []).slice()
@@ -2398,12 +2397,79 @@ function niRenderUserSubUI() {
     niSyncUserSubPromptPreview();
 }
 
+// ── 用户代入「代入角色」可搜索选择器（复用剧情 picker 的交互模式，独立 class 命名） ──
+
+function niRenderUserSubCharPicker(query = '') {
+    const list = q('#ni-user-sub-char-list');
+    const hidden = q('#ni-user-sub-char');
+    if (!list || !hidden) return;
+    const keyword = String(query || '').trim().toLocaleLowerCase();
+    const visible = (S.characters || []).map((c, i) => ({ c, i }))
+        .filter(({ c }) => !keyword || String(c.name || '').toLocaleLowerCase().includes(keyword));
+    const selectedIdx = hidden.value;
+    const html = [];
+    visible.forEach(({ c, i }) => {
+        const fs = getCharFirstStage(c);
+        const stage = fs != null ? `初次登场：${niUserSubStageLabel(fs)}` : '';
+        const selected = String(i) === selectedIdx;
+        html.push(`<button type="button" class="ni-char-picker-option${selected ? ' on' : ''}" data-char-idx="${i}" role="option" aria-selected="${selected ? 'true' : 'false'}">
+      <span class="ni-char-picker-option-title">${niEscHtml(c.name || `角色${i + 1}`)}</span>
+      ${stage ? `<span class="ni-char-picker-option-stage">${niEscHtml(stage)}</span>` : ''}
+    </button>`);
+    });
+    if (!visible.length) {
+        html.push(`<div class="ni-char-picker-empty">没有匹配的角色</div>`);
+    }
+    list.innerHTML = html.join('');
+}
+
+function niUpdateUserSubCharLabel() {
+    const hidden = q('#ni-user-sub-char');
+    const label = q('#ni-user-sub-char-label');
+    if (!hidden || !label) return;
+    const idx = parseInt(hidden.value, 10);
+    const c = Number.isFinite(idx) ? (S.characters || [])[idx] : null;
+    label.textContent = c?.name ? c.name : '选择角色';
+}
+
+function niToggleUserSubCharPicker(force = null) {
+    const panel = q('#ni-user-sub-char-panel');
+    const toggle = q('#ni-user-sub-char-toggle');
+    const search = q('#ni-user-sub-char-search');
+    if (!panel || !toggle) return;
+    const shouldOpen = force == null ? panel.style.display === 'none' : !!force;
+    if (!shouldOpen) {
+        niCloseUserSubCharPicker();
+        return;
+    }
+    niRenderUserSubCharPicker(search?.value || '');
+    niUpdateUserSubCharLabel();
+    panel.style.display = '';
+    toggle.setAttribute('aria-expanded', 'true');
+    setTimeout(() => search?.focus(), 0);
+}
+
+function niCloseUserSubCharPicker() {
+    const panel = q('#ni-user-sub-char-panel');
+    const toggle = q('#ni-user-sub-char-toggle');
+    if (panel) panel.style.display = 'none';
+    if (toggle) toggle.setAttribute('aria-expanded', 'false');
+}
+
+function niSelectUserSubChar(idx) {
+    const hidden = q('#ni-user-sub-char');
+    if (!hidden) return;
+    hidden.value = String(idx == null ? '' : idx);
+    niUpdateUserSubCharLabel();
+    niCloseUserSubCharPicker();
+}
+
 async function niSaveUserSubFromUI({ rerender = false } = {}) {
     const cfg = niGetUserSubConfig();
     const chk = q('#ni-user-sub-chk');
     const sel = q('#ni-user-sub-char');
     const aliasRows = qa('#ni-user-sub-list .ni-user-sub-row');
-    const hasLoadedCharacterOptions = !!sel && (S.characters?.length || 0) > 0 && sel.options.length > 1;
+    const hasLoadedCharacterOptions = !!sel && (S.characters?.length || 0) > 0;
     if (chk) cfg.userSubEnabled = chk.checked;
     cfg.userSubMode = niNormalizeUserSubMode(q('#ni-user-sub-mode .ni-user-sub-mode-btn.on')?.dataset.userSubMode ?? cfg.userSubMode);
     // 小说重数据尚未载入时，角色下拉只有占位项。此时切换总开关不能把聊天里已保存的角色和称呼清空。
@@ -3809,13 +3875,40 @@ jQuery(async () => {
         niRefreshUserSubDependents({ rerenderUserSub: true });
         await niPersistUserSubConfig({ immediate: true });
     });
-    $app.on('change', '#ni-user-sub-char', async function() {
+    // 代入角色可搜索选择器：点开/过滤/选择
+    $app.on('click', '#ni-user-sub-char-toggle', function(e) {
+        e.stopPropagation();
+        niToggleUserSubCharPicker();
+    });
+    $app.on('click', '#ni-user-sub-char-panel', e => e.stopPropagation());
+    $app.on('click', '#ni-user-sub-char-picker .ni-char-picker-option', async function() {
         const cfg = niGetUserSubConfig();
-        cfg.userSubCharIdx = this.value;
-        cfg.userSubAliases = niUserSubDefaultAliasesForChar(this.value);
+        const idx = this.dataset.charIdx || '';
+        niSelectUserSubChar(idx);
+        cfg.userSubCharIdx = idx;
+        cfg.userSubAliases = niUserSubDefaultAliasesForChar(idx);
         await niSaveUserSubChatStates({});
         niRefreshUserSubDependents({ rerenderUserSub: true });
         await niPersistUserSubConfig({ immediate: true });
+    });
+    $app.on('input', '#ni-user-sub-char-search', function() {
+        niRenderUserSubCharPicker(this.value);
+    });
+    $app.on('keydown', '#ni-user-sub-char-search', function(e) {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            niCloseUserSubCharPicker();
+        } else if (e.key === 'Enter') {
+            const first = q('#ni-user-sub-char-list .ni-char-picker-option');
+            if (first) {
+                e.preventDefault();
+                first.click();
+            }
+        }
+    });
+    // 点击面板外任意处关闭
+    $app.on('click', function(e) {
+        if (!e.target.closest?.('#ni-user-sub-char-picker')) niCloseUserSubCharPicker();
     });
     $app.on('click', '#ni-user-sub-add', async function() {
         const cfg = niGetUserSubConfig();

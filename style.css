@@ -2058,6 +2058,106 @@ select.ni-modal-input {
   font-size: 12px;
   text-align: center;
 }
+/* 用户代入「代入角色」可搜索选择器（独立命名，不复用剧情 picker 的 class） */
+.ni-char-picker { position: relative; }
+.ni-char-picker-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  height: 26px;
+  min-height: 26px;
+  padding: 3px 8px;
+  font-size: 12px;
+  line-height: 18px;
+  box-sizing: border-box;
+  cursor: pointer;
+  text-align: left;
+}
+.ni-char-picker-toggle span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ni-char-picker-toggle i { flex-shrink: 0; font-size: 12px; }
+.ni-char-picker-panel {
+  position: absolute;
+  z-index: 10002;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  padding: 6px;
+  border: 0.5px solid var(--SmartThemeBorderColor);
+  border-radius: 6px;
+  background: var(--SmartThemeBlurTintColor);
+  box-shadow: 0 6px 22px rgba(0,0,0,.22);
+}
+.ni-char-picker-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 7px;
+  margin-bottom: 5px;
+  border: 0.5px solid var(--SmartThemeBorderColor);
+  border-radius: 4px;
+  background: var(--SmartThemeChatTintColor);
+}
+.ni-char-picker-search i { flex-shrink: 0; color: var(--SmartThemeEmColor); }
+.ni-char-picker-search input {
+  min-width: 0;
+  width: 100%;
+  padding: 6px 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--SmartThemeBodyColor);
+  font-size: 12px;
+}
+.ni-char-picker-list {
+  max-height: 250px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.ni-char-picker-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--SmartThemeBodyColor);
+  cursor: pointer;
+  text-align: left;
+}
+.ni-char-picker-option:hover,
+.ni-char-picker-option.on {
+  background: var(--ni-primary-alpha-12, rgba(160, 68, 94, .12));
+}
+.ni-char-picker-option-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.ni-char-picker-option-stage {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--SmartThemeEmColor);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.ni-char-picker-empty {
+  padding: 18px 8px;
+  color: var(--SmartThemeEmColor);
+  font-size: 12px;
+  text-align: center;
+}
 .ni-modal-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 .ni-modal-cancel  { font-size: 12px; padding: 5px 12px; border: 0.5px solid var(--SmartThemeBorderColor); border-radius: 4px; background: var(--SmartThemeChatTintColor); cursor: pointer; color: var(--SmartThemeBodyColor); }
 .ni-modal-confirm { font-size: 12px; padding: 5px 12px; border: none; border-radius: 4px; background: var(--ni-primary, #A0445E); color: #fff; cursor: pointer; }
