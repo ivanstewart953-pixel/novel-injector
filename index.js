@@ -1881,6 +1881,7 @@ const {
     niTbReconcileCurrentNode,
     niTbSetCurrentIdx,
     niTbStageView,
+    niTbUnpinView,
     niTbSaveState,
     niTbLoadState,
     niGetTbStoryBarHtml,
@@ -4837,6 +4838,10 @@ jQuery(document).ready(function () {
 
     eventSource.on(event_types.MESSAGE_RENDERED,            onRendered);
     eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED,  onRendered);
+
+    // 真正生成新消息时解钉预览节点：之后的重挂载才允许自动回正到当前节点
+    eventSource.on(event_types.MESSAGE_RECEIVED, () => niTbUnpinView());
+    eventSource.on(event_types.MESSAGE_SENT,     () => niTbUnpinView());
 
     // 切换对话：重置状态，重新加载
     eventSource.on(event_types.CHAT_CHANGED, () => {
