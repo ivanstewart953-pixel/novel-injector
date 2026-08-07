@@ -810,9 +810,7 @@ function niResolveStageInjectionExecutionPlan(cfg = extension_settings[EXT_NAME]
 
     let curTbNode = null;
     if (cfg.transBookMode) {
-        const tbNodes = niGetTbNodes();
-        niTbReconcileCurrentNode(tbNodes);
-        curTbNode = tbNodes[S.tbCurIdx] || null;
+        curTbNode = niTbGetInjectionNode(niGetTbNodes());
     }
     const vectorRecallScope = niResolveVectorRecallStageScopes({
         enabledStages,
@@ -1879,6 +1877,7 @@ const {
     niGetTbNodes,
     niGetTbStages,
     niTbReconcileCurrentNode,
+    niTbGetInjectionNode,
     niTbSetCurrentIdx,
     niTbStageView,
     niTbUnpinView,
@@ -3049,7 +3048,7 @@ const {
     recallRelevant,
     niResolveVectorRecallStageScopes,
     niGetTbNodes,
-    niTbReconcileCurrentNode,
+    niTbGetInjectionNode,
     callCleanApi,
     niSaveSettings,
     saveSettingsDebounced,
