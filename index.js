@@ -4887,9 +4887,11 @@ jQuery(document).ready(function () {
             // 用户从状态栏/弹窗切到后续节点后，早期未归档节点不能再抢占当前阶段。
             if (!niTbPeekPendingAdvancePrompt()) {
                 const nodes = niGetTbNodes();
-                niTbReconcileCurrentNode(nodes);
-                if (nodes.length > 0 && S.tbCurIdx === 0 && !nodes[0].done) {
-                    niTbWriteOpeningPrompt();
+                if (nodes.length > 0) {
+                    niTbReconcileCurrentNode(nodes);
+                    if (S.tbCurIdx === 0 && !nodes[0].done) {
+                        niTbWriteOpeningPrompt();
+                    }
                 }
             }
 
@@ -4902,9 +4904,10 @@ jQuery(document).ready(function () {
             }
 
             // ── 持续提示词：每条消息都注入 ───────────────────────
+            // 节点必须走归档进度推导（niTbGetInjectionNode）：锚点 tbCurIdx 不随
+            // 勾选归档移动，直接按锚点下标取节点会在锚点归档后继续注入已归档内容。
             const nodes = niGetTbNodes();
-            niTbReconcileCurrentNode(nodes);
-            const curNode = nodes[S.tbCurIdx] || nodes[0];
+            const curNode = niTbGetInjectionNode(nodes) || nodes[0];
             if (!curNode) return;
 
             const ongoingTpl = (cfg.tbOngoingPrompt || TB_DEFAULT_ONGOING_PROMPT).trim();
@@ -5337,7 +5340,7 @@ console.log('[NI-TB] 穿书模式模块已加载');
                 console.error('[NI] 穿书弹窗无法切换预览节点：主状态控制器未就绪');
                 return;
             }
-            window.niTbSetViewIdx(newIdx, nodes, { render: true });
+            window.niTbSetViewIdx(newIdx, nodes, { render: true, persist: true });
             _popCurIdx = newIdx;
         }
         niPopRender({ alignStagePage: true, alignNodePage: true });
