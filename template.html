@@ -71,6 +71,11 @@
               <input type="text" id="ni-api-timeout" class="ni-kb-inp" value="15" style="width:14px" inputmode="numeric" pattern="[0-9]*">
               <span>分钟自动重试</span>
             </label>
+            <label class="ni-timeout-label" title="一轮清洗结束后仍有失败或未完成的分段时，自动重新续跑，直到全部完成；等待期间可随时点「暂停」中断。全部完成后弹窗提醒">
+              <i class="ti ti-repeat"></i>
+              <input type="checkbox" id="ni-clean-auto-resume">
+              <span>自动续跑清洗</span>
+            </label>
           </div>
           <div class="ni-field">
             <div style="display:flex;align-items:center;justify-content:space-between">
@@ -1354,6 +1359,17 @@
       </div>
     </div>
 
+  </div>
+
+  <!-- 清洗完成弹窗：开启「自动续跑清洗」后全部分段补齐时提醒离开屏幕的用户 -->
+  <div class="ni-modal-bg" id="ni-clean-done-modal" style="display:none">
+    <div class="ni-modal" role="dialog" aria-modal="true" aria-labelledby="ni-clean-done-title">
+      <div class="ni-modal-title" id="ni-clean-done-title">清洗压缩完成</div>
+      <pre class="ni-vec-debug-content" id="ni-clean-done-content"></pre>
+      <div class="ni-modal-btns">
+        <button class="ni-modal-confirm" id="ni-clean-done-close">知道了</button>
+      </div>
+    </div>
   </div>
 
   <!-- 向量诊断弹窗：替代移动端会截断长文本的原生 alert -->

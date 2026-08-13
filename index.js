@@ -45,6 +45,7 @@ import {
     niNormalizeRawInjectionMaxTokens,
     niNormalizeVectorInjectionPreference,
     niResolveDirectStageInjectionStages,
+    niBuildTransbookStageDetailText,
     niResolvePausedTransbookPromptSlots,
     niResolveStageInjectionPlan,
     niSetVectorInjectionDisabledByUser,
@@ -276,6 +277,7 @@ const DEFAULT_SETTINGS = {
     apiTimeoutMin: 15,  // 每段 API 请求超时时间
     apiRateLimit: 3,    // 每分钟最多请求次数
     apiConcurrency: 1,  // 清洗、阶段概括和角色 AI 人设共用的最大并发请求数；0按串行兼容
+    cleanAutoResume: false, // 一轮清洗后仍有未完成分段时自动续跑，直到全部完成；完成后弹窗提醒
     vecRateLimit: 3,    // 向量化每分钟最多请求次数
     vecConcurrency: 1,  // 1=串行；>1=最大并发请求数；0按串行兼容
     vecBatchSize: 16,   // 每次 Embedding 请求批量提交的文本块数
@@ -678,6 +680,7 @@ function niSaveSettings({ scheduleAutosave = true } = {}) {
     cfg.cleanUrl    = q('#ni-clean-url')?.value || cfg.cleanUrl;
     cfg.cleanModel  = q('#ni-clean-model')?.value || cfg.cleanModel;
     cfg.cleanStream = q('#ni-clean-stream')?.checked ?? cfg.cleanStream;
+    cfg.cleanAutoResume = q('#ni-clean-auto-resume')?.checked ?? cfg.cleanAutoResume;
     cfg.vecKey      = q('#ni-vec-key')?.value || cfg.vecKey;
     cfg.vecUrl      = q('#ni-vec-url')?.value || cfg.vecUrl;
     cfg.vecModel    = q('#ni-vec-model')?.value || cfg.vecModel;
@@ -849,13 +852,21 @@ function niBuildStageInjectionPayloadForPlan(plan, cfg = extension_settings[EXT_
         maxTokens,
         rawMode,
         getDetailText: si => {
+            const getCompressedChunkText = ci => (S.chunkResults[ci] && S.chunkResults[ci].trim())
+                ? S.chunkResults[ci]
+                : (S.chunks[ci] || '');
+            // 穿书模式只发当前正在进行的那个节点；阶段里排在它后面的还没演到。
+            const tbDetail = niBuildTransbookStageDetailText(si, plan.curTbNode, {
+                rawMode,
+                getCompressedChunkText,
+            });
+            if (tbDetail != null) return tbDetail;
+
             if (rawMode === 'compressed') {
                 const chunkIdxSet = runtimeIndex.chunkIdxsByStage[si] || new Set();
-                const texts = [...chunkIdxSet].sort((a, b) => a - b).map(ci => {
-                    return (S.chunkResults[ci] && S.chunkResults[ci].trim())
-                        ? S.chunkResults[ci]
-                        : (S.chunks[ci] || '');
-                }).filter(text => String(text || '').trim());
+                const texts = [...chunkIdxSet].sort((a, b) => a - b)
+                    .map(getCompressedChunkText)
+                    .filter(text => String(text || '').trim());
                 return texts.length ? `【第 ${si} 阶段压缩原文】\n${texts.join('\n')}` : '';
             }
             const nodes = runtimeIndex.nodesByStage[si] || { main: [], sub: [], pivot: [] };
@@ -937,6 +948,8 @@ function syncSettingsToUI() {
         const pill = q('#ni-stream-pill');
         if (pill) pill.textContent = streamEl.checked ? '开' : '关';
     }
+    const autoResumeEl = q('#ni-clean-auto-resume');
+    if (autoResumeEl) autoResumeEl.checked = !!(cfg.cleanAutoResume ?? DEFAULT_SETTINGS.cleanAutoResume);
     sv('#ni-vec-key',      cfg.vecKey      || '');
     sv('#ni-vec-url',      cfg.vecUrl      || DEFAULT_SETTINGS.vecUrl);
     sv('#ni-vec-model',    cfg.vecModel    || DEFAULT_SETTINGS.vecModel);
@@ -3241,6 +3254,8 @@ async function onPromptReady(eventData) {
                     historyTopK: 2,
                     splitSections: true,
                     keywordTerms,
+                    // 非穿书模式没有当前节点可锚定，让召回自己从得分分布反推当前阶段。
+                    inferAnchorStage: !curTbNode,
                 });
                 if (recallText.trim()) {
                     const vecContent = `[小说原著相关片段·向量召回]\n${recallText}\n[/小说原著相关片段·向量召回]`;
@@ -3630,6 +3645,17 @@ jQuery(async () => {
     // 流式开关
     $app.on('change', '#ni-clean-stream', function() {
         niSaveSettings();
+    });
+    // 自动续跑清洗开关
+    $app.on('change', '#ni-clean-auto-resume', function() {
+        niSaveSettings();
+    });
+    $app.on('click', '#ni-clean-done-close', () => {
+        const modal = q('#ni-clean-done-modal');
+        if (modal) modal.style.display = 'none';
+    });
+    $app.on('click', '#ni-clean-done-modal', function(e) {
+        if (e.target === this) this.style.display = 'none';
     });
     $app.on('click', '#ni-stream-btn', function() {
         const cb = q('#ni-clean-stream');
