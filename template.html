@@ -71,11 +71,12 @@
               <input type="text" id="ni-api-timeout" class="ni-kb-inp" value="15" style="width:14px" inputmode="numeric" pattern="[0-9]*">
               <span>分钟自动重试</span>
             </label>
-            <label class="ni-timeout-label" title="一轮清洗结束后仍有失败或未完成的分段时，自动重新续跑，直到全部完成；等待期间可随时点「暂停」中断。全部完成后弹窗提醒">
+            <span class="ni-timeout-label" id="ni-clean-auto-resume-btn" title="一轮清洗结束后仍有失败或未完成的分段时，自动重新续跑，直到全部完成；等待期间可随时点「暂停」中断。全部完成后弹窗提醒" style="cursor:pointer;user-select:none">
               <i class="ti ti-repeat"></i>
-              <input type="checkbox" id="ni-clean-auto-resume">
+              <input type="checkbox" id="ni-clean-auto-resume" style="display:none">
               <span>自动续跑清洗</span>
-            </label>
+              <span id="ni-clean-auto-resume-pill" style="display:inline-block;font-size:11px;font-weight:700;transition:color .2s;color:var(--ni-primary,#A0445E)">关</span>
+            </span>
           </div>
           <div class="ni-field">
             <div style="display:flex;align-items:center;justify-content:space-between">

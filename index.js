@@ -949,7 +949,11 @@ function syncSettingsToUI() {
         if (pill) pill.textContent = streamEl.checked ? '开' : '关';
     }
     const autoResumeEl = q('#ni-clean-auto-resume');
-    if (autoResumeEl) autoResumeEl.checked = !!(cfg.cleanAutoResume ?? DEFAULT_SETTINGS.cleanAutoResume);
+    if (autoResumeEl) {
+        autoResumeEl.checked = !!(cfg.cleanAutoResume ?? DEFAULT_SETTINGS.cleanAutoResume);
+        const autoResumePill = q('#ni-clean-auto-resume-pill');
+        if (autoResumePill) autoResumePill.textContent = autoResumeEl.checked ? '开' : '关';
+    }
     sv('#ni-vec-key',      cfg.vecKey      || '');
     sv('#ni-vec-url',      cfg.vecUrl      || DEFAULT_SETTINGS.vecUrl);
     sv('#ni-vec-model',    cfg.vecModel    || DEFAULT_SETTINGS.vecModel);
@@ -2747,15 +2751,44 @@ function niReplaceOutsideAngleTags(text, pattern, replacement) {
     }).join('');
 }
 
+// 替换目标自身包含的名字不能再替换。niGetUserSubstitutionNames 会带上 niCharPresenceTerms
+// 派生的去姓短名（「凌小东」→「小东」），当用户 persona 名就是角色本人时，把「小东」换成
+// 「凌小东」等于在原名前插一个姓，得到「凌凌小东」；结果又被写回聊天记录，下一轮再叠一次。
+function niFilterUserSubNamesForReplacement(names, replacement) {
+    const target = String(replacement || '');
+    return names.filter(name => name && !target.includes(name));
+}
+
+// 收敛历史污染：修复前每轮都会多插一个姓前缀，存档里留下「凌凌小东」「凌凌凌凌小东」。
+// 只折叠「替换目标的前缀连续重复 ≥2 次 + 该短名」这一种形态，正常叠词不会命中。
+function niBuildUserSubRepeatFixes(names, replacement) {
+    const target = String(replacement || '');
+    const fixes = [];
+    if (!target) return fixes;
+    names.forEach(name => {
+        if (!name || name === target || !target.endsWith(name)) return;
+        const prefix = target.slice(0, target.length - name.length);
+        if (!prefix) return;
+        fixes.push(new RegExp(`(?:${niEscapeRegExp(prefix)}){2,}${niEscapeRegExp(name)}`, 'g'));
+    });
+    return fixes;
+}
+
 function niApplyUserSubstitution(text, replacement = niGetUserSubOutputName()) {
     if (typeof text !== 'string' || !text) return text;
-    const names = niGetUserSubstitutionNames();
-    if (!names.length) return text;
+    const allNames = niGetUserSubstitutionNames();
+    if (!allNames.length) return text;
+    const target = replacement || '<user>';
     let out = text;
-    names.forEach(name => {
-        out = niReplaceOutsideAngleTags(out, new RegExp(niEscapeRegExp(name), 'g'), replacement || '<user>');
+    niBuildUserSubRepeatFixes(allNames, target).forEach(re => {
+        out = niReplaceOutsideAngleTags(out, re, target);
     });
-    return out;
+    const names = niFilterUserSubNamesForReplacement(allNames, target);
+    if (!names.length) return out;
+    // 单趟扫描。逐个名字多趟 replace 会让前一趟的产物被后一趟再次匹配，
+    // 长名先替换也救不回来——短名仍会命中刚写进去的替换目标。
+    const pattern = new RegExp(names.map(niEscapeRegExp).join('|'), 'g');
+    return niReplaceOutsideAngleTags(out, pattern, target);
 }
 
 function niApplyUserSubstitutionToContent(content) {
@@ -3647,7 +3680,12 @@ jQuery(async () => {
         niSaveSettings();
     });
     // 自动续跑清洗开关
-    $app.on('change', '#ni-clean-auto-resume', function() {
+    $app.on('click', '#ni-clean-auto-resume-btn', function() {
+        const cb = q('#ni-clean-auto-resume');
+        const pill = q('#ni-clean-auto-resume-pill');
+        if (!cb) return;
+        cb.checked = !cb.checked;
+        if (pill) pill.textContent = cb.checked ? '开' : '关';
         niSaveSettings();
     });
     $app.on('click', '#ni-clean-done-close', () => {
