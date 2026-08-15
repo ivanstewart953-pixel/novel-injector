@@ -1,4 +1,4 @@
-# Novel Injector（小说注入器）
+# Novel Injector Plus（分支记忆增强版）
 
 一个 SillyTavern（酒馆）第三方扩展：**让 AI 先把一部长篇小说读完，再在你聊天时按需把用得上的原著资料喂给它。**
 
@@ -67,7 +67,7 @@
 在 SillyTavern 的第三方扩展安装入口粘贴：
 
 ```
-https://github.com/ZZZa-o/novel-injector
+https://github.com/ivanstewart953-pixel/novel-injector-plus
 ```
 
 装完**刷新页面**，点顶部工具栏的📖书本图标打开面板。
@@ -77,7 +77,7 @@ https://github.com/ZZZa-o/novel-injector
 把整个仓库放进酒馆扩展目录：
 
 ```
-SillyTavern/public/scripts/extensions/third-party/novel-injector
+SillyTavern/public/scripts/extensions/third-party/novel-injector-plus
 ```
 
 目录里应有：
@@ -87,6 +87,8 @@ manifest.json    index.js    template.html    style.css    lib/    README.md
 ```
 
 放好后刷新或重启酒馆。
+
+> **从原版切换到 Plus：** 不需要删除原版，也不要同时启用两个版本。先在“管理扩展”中停用原版，再安装并启用 Plus。Plus 保留原版的内部数据命名空间，因此会继续读取已有设置、小说库和聊天状态；停用或保留原版目录不会清除这些数据。
 
 > 顶栏图标可以在扩展菜单里的「显示/隐藏顶栏图标」开关掉（默认显示）。
 

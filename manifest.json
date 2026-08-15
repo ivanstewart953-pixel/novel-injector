@@ -1,12 +1,12 @@
 {
-  "display_name": "Novel Injector - 小说上下文注入",
+  "display_name": "Novel Injector Plus - 分支记忆增强版",
   "loading_order": 200,
   "requires": [],
   "optional": [],
   "js": "index.js",
   "css": "style.css",
   "author": "",
-  "version": "1.0.0",
-  "homePage": "",
+  "version": "1.1.0",
+  "homePage": "https://github.com/ivanstewart953-pixel/novel-injector-plus",
   "auto_update": false
 }
