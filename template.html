@@ -402,6 +402,37 @@
             </div>
           </div>
 
+          <!-- Accordion: 当前分支长期记忆-->
+          <div class="ni-inj-acc-header" data-ni-acc="memory">
+            <div class="ni-inj-acc-left">
+              <i class="ti ti-brain"></i><span>分支长期记忆</span><i class="ti ti-chevron-down ni-inj-acc-chevron"></i>
+            </div>
+          </div>
+          <div class="ni-inj-panel" id="ni-inj-panel-memory">
+            <div class="ni-inj-row">
+              <div class="ni-field" style="margin-bottom:0">
+                <label>注入位置</label>
+                <select id="ni-memory-inj-pos">
+                  <option value="2">主提示前</option>
+                  <option value="0">主提示后</option>
+                  <option value="1" selected>聊天内</option>
+                </select>
+              </div>
+              <div class="ni-field" style="margin-bottom:0">
+                <label>注入深度</label>
+                <input type="number" id="ni-memory-inj-depth" value="1" min="0" max="9999">
+              </div>
+              <div class="ni-field" style="margin-bottom:0">
+                <label>消息角色</label>
+                <select id="ni-memory-inj-role">
+                  <option value="0" selected>系统</option>
+                  <option value="1">用户</option>
+                  <option value="2">助手</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
           <!-- Accordion: 偏差注入-->
           <div class="ni-inj-acc-header" data-ni-acc="dev">
             <div class="ni-inj-acc-left">
@@ -544,6 +575,53 @@
 
     <!-- ========== PAGE: PLOT ==========-->
     <div class="ni-page" id="ni-pg-plot">
+
+      <!-- Branch Long-term Memory Card-->
+      <div class="ni-card" id="ni-memory-card">
+        <div class="ni-ctitle ni-memory-title">
+          <span class="ni-ctitle-label"><i class="ti ti-brain"></i>分支长期记忆</span>
+          <label class="ni-memory-enable" for="ni-memory-enabled" title="按固定楼层间隔自动生成事实账本；本地检索不需要向量 API">
+            <input type="checkbox" id="ni-memory-enabled">
+            <span class="ni-cfg-chk"><i class="ti ti-check"></i></span>
+            <span>启用</span>
+          </label>
+          <button class="ni-icon-btn" id="ni-memory-cfg-btn" title="长期记忆设置"><i class="ti ti-settings"></i></button>
+          <button class="ni-icon-btn" id="ni-memory-prompt-btn" title="编辑事实抽取提示词"><i class="ti ti-code"></i></button>
+        </div>
+        <p class="ni-desc">当前聊天是分支正史；每批生成带证据楼层的事实账本，本地分层检索后少量注入。原著冲突内容自动降为参考。</p>
+        <div id="ni-memory-cfg-panel" hidden>
+          <div class="ni-memory-grid">
+            <label>每批楼层
+              <input type="number" id="ni-memory-batch-size" value="10" min="2" max="50">
+            </label>
+            <label>召回条数
+              <input type="number" id="ni-memory-top-k" value="5" min="1" max="12">
+            </label>
+            <label>注入预算
+              <span><input type="number" id="ni-memory-token-budget" value="2800" min="400" max="12000" step="100"> Token</span>
+            </label>
+            <label>原著参考预算
+              <span><input type="number" id="ni-memory-original-token-budget" value="1000" min="256" max="6000" step="100"> Token</span>
+            </label>
+            <label>查询最近消息
+              <span><input type="number" id="ni-memory-recent-count" value="4" min="1" max="12"> 条</span>
+            </label>
+          </div>
+          <div class="ni-memory-help"><i class="ti ti-info-circle"></i>召回使用浏览器本地中文词元、实体、重要度、时间和未完成事项排序；不配置 Embedding API 也能使用。</div>
+        </div>
+        <div class="ni-prompt-box" id="ni-memory-prompt-box">
+          <div class="ni-pt-wrap">
+            <textarea id="ni-memory-prompt" class="ni-pt-textarea" rows="9" spellcheck="false"></textarea>
+            <button class="ni-pt-reset" id="ni-memory-prompt-reset" title="恢复默认事实账本提示词"><i class="ti ti-rotate"></i></button>
+          </div>
+        </div>
+        <div class="ni-memory-actions">
+          <button class="ni-btn ni-btn-w" id="ni-memory-update"><i class="ti ti-refresh"></i>补跑未总结楼层</button>
+          <button class="ni-char-edit-btn ni-memory-reset" id="ni-memory-reset" title="清空当前聊天的记忆，保留原始聊天"><i class="ti ti-trash"></i>重建</button>
+        </div>
+        <div id="ni-memory-status" class="ni-dev-note" role="status" aria-live="polite">已记录至第 0 楼</div>
+        <div id="ni-memory-latest" class="ni-memory-latest"><div class="ni-memory-empty">当前聊天还没有长期记忆</div></div>
+      </div>
 
       <!-- Deviation Analysis Card-->
       <div class="ni-card">

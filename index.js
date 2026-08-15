@@ -194,6 +194,11 @@ import {
     niResolveStageInjectionUiState,
 } from './lib/ui-system.js';
 
+import {
+    BRANCH_MEMORY_EXTRACT_PROMPT,
+    createBranchMemoryController,
+} from './lib/memory-system.js';
+
 // ============================================================
 // 常量
 // ============================================================
@@ -263,6 +268,19 @@ const DEFAULT_SETTINGS = {
     devAutoUpdateEnabled: false,
     devAutoUpdateEvery: 10,
     devManualMsgCount: 10,
+    // 当前跑团分支长期记忆；召回默认完全在浏览器本地完成，不要求向量 API。
+    branchMemoryEnabled: false,
+    branchMemoryBatchSize: 10,
+    branchMemoryTopK: 5,
+    branchMemoryTokenBudget: 2800,
+    branchMemoryOriginalTokenBudget: 1000,
+    branchMemoryRecentCount: 4,
+    branchMemoryEpisodeSize: 8,
+    branchMemoryArcSize: 6,
+    branchMemoryInjPos: 1,
+    branchMemoryInjDepth: 1,
+    branchMemoryInjRole: 0,
+    branchMemoryPrompt: BRANCH_MEMORY_EXTRACT_PROMPT,
     rawInjMode: "nodes",  // "nodes"=剧情节点 | "compressed"=压缩原文
     globalPromptSource: 'builtin', // builtin=内置提示词 tavern=跟随酒馆主预设 none=不使用
     globalPrompt: GLOBAL_PROMPT,
@@ -1039,6 +1057,7 @@ function syncSettingsToUI() {
         _tbChk.checked = !!cfg.transBookMode;
         _tbStateTxt.textContent = _tbChk.checked ? '开' : '关';
     }
+    niBranchMemory?.syncUi();
 }
 
 // ============================================================
@@ -1364,6 +1383,18 @@ const {
     getCurrentAbortController: () => S._currentAbortController,
     setCurrentAbortController: controller => { S._currentAbortController = controller; },
     fetch,
+});
+
+const niBranchMemory = createBranchMemoryController({
+    getSettings: () => extension_settings[EXT_NAME] || {},
+    defaultSettings: DEFAULT_SETTINGS,
+    getContext,
+    callApiSeq,
+    query: q,
+    saveSettings: niSaveSettings,
+    confirm: message => confirm(message),
+    alert: message => alert(message),
+    logger: console,
 });
 
 const { niRequestEmbeddings, embedText } = createEmbeddingClient({
@@ -3231,6 +3262,8 @@ async function onPromptReady(eventData) {
     const chat = ctx?.chat || [];
     if (!chat.length) return;
     niLoadDeviationStateFromChat({ allowLegacyMigration: false, collapsed: true, syncUI: false });
+    const branchMemoryStore = niBranchMemory.readStore();
+    const branchMemoryActive = cfg.branchMemoryEnabled === true && branchMemoryStore.leaves.length > 0;
 
     // 读取各自的注入配置
     const vecPos   = cfg.vecInjPos   ?? DEFAULT_SETTINGS.vecInjPos;
@@ -3284,14 +3317,17 @@ async function onPromptReady(eventData) {
                     lightRecallContext,
                     nodeRecallContext,
                     historicalStages: vectorRecallScope.historicalStages,
-                    historyTopK: 2,
+                    topK: branchMemoryActive
+                        ? Math.min(2, Math.max(1, parseInt(cfg.recallTopK, 10) || DEFAULT_SETTINGS.recallTopK))
+                        : undefined,
+                    historyTopK: branchMemoryActive ? 1 : 2,
                     splitSections: true,
                     keywordTerms,
                     // 非穿书模式没有当前节点可锚定，让召回自己从得分分布反推当前阶段。
                     inferAnchorStage: !curTbNode,
                 });
                 if (recallText.trim()) {
-                    const vecContent = `[小说原著相关片段·向量召回]\n${recallText}\n[/小说原著相关片段·向量召回]`;
+                    const vecContent = `[原著参考·非当前事实·向量召回]\n优先级规则：以下内容只说明原著中曾发生或可能发生的内容。若与最近聊天、当前分支状态或分支长期记忆冲突，必须忽略冲突部分，不得强行复刻原著。\n${recallText}\n[/原著参考·非当前事实·向量召回]`;
                     doInject(`${EXT_NAME}_vec`, vecContent, vecPos, vecDepth, vecRole);
                 }
             } catch (e) { console.warn('[NI] 向量召回失败:', e); }
@@ -3304,14 +3340,24 @@ async function onPromptReady(eventData) {
         if (rawMode === 'compressed') {
             await niEnsureChunksLoaded();
         }
+        const plotRuntimeCfg = branchMemoryActive
+            ? {
+                ...cfg,
+                plotInjMaxTokens: Math.min(
+                    niNormalizeRawInjectionMaxTokens(cfg.plotInjMaxTokens, DEFAULT_SETTINGS.plotInjMaxTokens),
+                    Math.max(256, parseInt(cfg.branchMemoryOriginalTokenBudget, 10) || DEFAULT_SETTINGS.branchMemoryOriginalTokenBudget),
+                ),
+            }
+            : cfg;
         const maxTokens = niNormalizeRawInjectionMaxTokens(
-            cfg.plotInjMaxTokens,
+            plotRuntimeCfg.plotInjMaxTokens,
             DEFAULT_SETTINGS.plotInjMaxTokens,
         );
-        const result = niBuildStageInjectionPayloadForPlan(stageInjectionPlan, cfg);
+        const result = niBuildStageInjectionPayloadForPlan(stageInjectionPlan, plotRuntimeCfg);
 
         if (result.content) {
-            doInject(`${EXT_NAME}_plot`, result.content, plotPos, plotDepth, plotRole);
+            const plotReference = `[原著剧情参考·非当前事实]\n优先级规则：原著节点不是当前分支已经发生的事实。时间、地点、人物状态、关系和事件结果以最近聊天与当前分支记忆为准；不得为了贴合下列节点而回滚或改写跑团历史。\n${result.content}\n[/原著剧情参考·非当前事实]`;
+            doInject(`${EXT_NAME}_plot`, plotReference, plotPos, plotDepth, plotRole);
         }
         niUpdateStageInjectionBudgetNote(result, { visible: true });
         if (result.omittedStages.length || result.truncated) {
@@ -3386,6 +3432,15 @@ async function onPromptReady(eventData) {
     const worldContent = niBuildWorldInjectionText(niGetWorldCategories());
     if (worldContent) {
         doInject(`${EXT_NAME}_world`, worldContent, worldPos, worldDepth, worldRole);
+    }
+
+    // ── 当前分支长期记忆：靠近最近聊天注入，事实优先级高于全部原著资料 ──
+    const branchMemoryContent = niBranchMemory.getInjectionText(chat);
+    if (branchMemoryContent) {
+        const memoryPos = cfg.branchMemoryInjPos ?? DEFAULT_SETTINGS.branchMemoryInjPos;
+        const memoryDepth = cfg.branchMemoryInjDepth ?? DEFAULT_SETTINGS.branchMemoryInjDepth;
+        const memoryRole = cfg.branchMemoryInjRole ?? DEFAULT_SETTINGS.branchMemoryInjRole;
+        doInject(`${EXT_NAME}_branch_memory`, branchMemoryContent, memoryPos, memoryDepth, memoryRole);
     }
 
     // ── 偏差注入 ──
@@ -4837,6 +4892,8 @@ jQuery(async () => {
     eventSource.makeLast?.(event_types.CHAT_COMPLETION_PROMPT_READY, niFinalUserSubPromptRewrite);
     eventSource.makeLast?.(event_types.MESSAGE_RECEIVED, niPostprocessUserSubMessage);
     niBindDeviationAutoUpdateEvents();
+    niBranchMemory.bindUi(document);
+    niBranchMemory.bindEvents(eventSource, event_types);
     if (event_types.CHAT_CHANGED) {
         eventSource.on(event_types.CHAT_CHANGED, () => {
             _niDetachedUserSubConfig = null;

@@ -3316,6 +3316,144 @@ select.ni-modal-input {
 }
 #ni-dev-cfg-panel[hidden] { display: none !important; }
 #ni-dev-cfg-panel.on { display: grid; gap: 8px; }
+
+/* ============================================================
+ 当前分支长期记忆
+ ============================================================*/
+.ni-memory-title .ni-memory-enable {
+    margin-left: auto;
+}
+.ni-memory-enable {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    cursor: pointer;
+    user-select: none;
+}
+.ni-memory-enable input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+.ni-memory-enable .ni-cfg-chk {
+    width: 15px;
+    height: 15px;
+    border-radius: 4px;
+    border: .5px solid var(--ni-primary-alpha-30, rgba(160, 68, 94, .3));
+    background: var(--color-background-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+}
+.ni-memory-enable .ni-cfg-chk i {
+    color: transparent;
+    font-size: 10px;
+}
+.ni-memory-enable input[type="checkbox"]:checked + .ni-cfg-chk {
+    background: var(--ni-primary, #A0445E);
+    border-color: var(--ni-primary, #A0445E);
+}
+.ni-memory-enable input[type="checkbox"]:checked + .ni-cfg-chk i {
+    color: var(--ni-checkbox-on, #fff);
+}
+#ni-memory-cfg-panel {
+    margin-top: 8px;
+    padding: 10px;
+    border: .5px solid var(--color-border-tertiary);
+    border-radius: 4px;
+    background: var(--color-background-secondary);
+}
+#ni-memory-cfg-panel[hidden] { display: none !important; }
+.ni-memory-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 12px;
+}
+.ni-memory-grid label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    color: var(--color-text-secondary);
+    font-size: 11px;
+}
+.ni-memory-grid label > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+.ni-memory-grid input {
+    width: 76px;
+    min-width: 0;
+    height: 27px;
+    padding: 2px 6px;
+    border: .5px solid var(--color-border-secondary);
+    border-radius: 4px;
+    background: var(--color-background-primary);
+    color: var(--color-text-primary);
+    font-size: 11px;
+    box-sizing: border-box;
+}
+.ni-memory-help {
+    display: flex;
+    align-items: flex-start;
+    gap: 5px;
+    margin-top: 9px;
+    color: var(--color-text-tertiary);
+    font-size: 10px;
+    line-height: 1.5;
+}
+.ni-memory-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.ni-memory-actions #ni-memory-update { flex: 1; }
+.ni-memory-reset {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+.ni-memory-latest {
+    display: grid;
+    gap: 6px;
+    margin-top: 8px;
+}
+.ni-memory-item {
+    padding: 7px 9px;
+    border: .5px solid var(--color-border-tertiary);
+    border-radius: 4px;
+    background: var(--color-background-secondary);
+}
+.ni-memory-item span {
+    color: var(--ni-primary-focus, #B8336A);
+    font-size: 10px;
+    font-weight: 600;
+}
+.ni-memory-item p {
+    margin: 3px 0 0;
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    line-height: 1.55;
+}
+.ni-memory-empty {
+    padding: 8px;
+    color: var(--color-text-tertiary);
+    font-size: 11px;
+    text-align: center;
+}
+@media (max-width: 520px) {
+    .ni-memory-grid { grid-template-columns: 1fr; }
+}
+
 #ni-dev-cfg-panel .ni-toggle-label input[type="checkbox"],
 #ni-dev-cfg-panel .ni-toggle-wrap input[type="checkbox"] {
     position: absolute;
