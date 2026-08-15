@@ -627,6 +627,11 @@
       <div class="ni-card">
         <div class="ni-ctitle">
           <span class="ni-ctitle-label"><i class="ti ti-ruler-measure"></i>前文偏差分析</span>
+          <label class="ni-memory-enable ni-module-injection-toggle" for="ni-dev-injection-enabled" title="只控制偏差内容是否注入；不会删除结果，也不会改变自动更新设置">
+            <input type="checkbox" id="ni-dev-injection-enabled" checked>
+            <span class="ni-cfg-chk"><i class="ti ti-check"></i></span>
+            <span>注入</span>
+          </label>
           <button class="ni-icon-btn" id="ni-dev-cfg-btn" title="偏差分析设置"><i class="ti ti-settings"></i></button>
           <button class="ni-icon-btn" id="ni-dev-prompt-btn" title="编辑提示词"><i class="ti ti-code"></i></button>
         </div>
@@ -812,7 +817,12 @@
       <div class="ni-card" id="ni-world-card">
         <div class="ni-ctitle ni-ctitle-toggle" id="ni-world-toggle-head" style="cursor:pointer;user-select:none;">
           <span class="ni-ctitle-label"><i class="ti ti-world"></i>世界设定</span>
-          <i class="ti ti-chevron-down ni-world-chevron-icon" id="ni-world-chevron" style="margin-left:auto;font-size:14px;color:var(--color-text-tertiary);transition:transform .2s;"></i>
+          <label class="ni-memory-enable ni-module-injection-toggle" for="ni-world-injection-enabled" title="只控制世界设定是否注入；不会删除分类内容或关闭 AI 生成">
+            <input type="checkbox" id="ni-world-injection-enabled" checked>
+            <span class="ni-cfg-chk"><i class="ti ti-check"></i></span>
+            <span>注入</span>
+          </label>
+          <i class="ti ti-chevron-down ni-world-chevron-icon" id="ni-world-chevron" style="font-size:14px;color:var(--color-text-tertiary);transition:transform .2s;"></i>
         </div>
         <div id="ni-world-body-wrap" style="display:none">
           <div class="ni-world-gen-row" id="ni-world-gen-row">

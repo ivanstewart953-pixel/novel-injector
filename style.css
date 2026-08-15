@@ -751,7 +751,7 @@
 #ni-user-sub-prompt-btn:hover {
   background: var(--color-background-secondary);
 }
-#ni-dev-cfg-btn { margin-left: auto; }
+#ni-dev-cfg-btn { margin-left: 0; }
 
 /* ---- Tool Row ----*/
 .ni-tool-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
@@ -3361,6 +3361,10 @@ select.ni-modal-input {
 .ni-memory-enable input[type="checkbox"]:checked + .ni-cfg-chk i {
     color: var(--ni-checkbox-on, #fff);
 }
+.ni-module-injection-toggle {
+    margin-left: auto;
+    flex-shrink: 0;
+}
 #ni-memory-cfg-panel {
     margin-top: 8px;
     padding: 10px;
@@ -3450,8 +3454,44 @@ select.ni-modal-input {
     font-size: 11px;
     text-align: center;
 }
+.ni-memory-list-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 2px;
+}
+.ni-memory-list-btn,
+.ni-memory-page-btn {
+    border: .5px solid var(--color-border-secondary);
+    border-radius: 4px;
+    background: var(--color-background-primary);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    font-size: 10px;
+}
+.ni-memory-list-btn {
+    min-height: 26px;
+    padding: 4px 9px;
+}
+.ni-memory-pager {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--color-text-tertiary);
+    font-size: 10px;
+}
+.ni-memory-page-btn {
+    width: 25px;
+    height: 25px;
+    padding: 0;
+}
+.ni-memory-list-btn:hover,
+.ni-memory-page-btn:hover:not(:disabled) { background: var(--color-background-secondary); }
+.ni-memory-page-btn:disabled { opacity: .35; cursor: default; }
 @media (max-width: 520px) {
     .ni-memory-grid { grid-template-columns: 1fr; }
+    .ni-memory-list-controls { align-items: flex-start; flex-direction: column; }
 }
 
 #ni-dev-cfg-panel .ni-toggle-label input[type="checkbox"],

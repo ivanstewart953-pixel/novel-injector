@@ -267,6 +267,7 @@ const DEFAULT_SETTINGS = {
     devInjPos: 2,    // 默认主提示前，作为分支现实约束
     devInjDepth: 0,
     devInjRole: 0,
+    devInjectionEnabled: true,
     devAutoUpdateEnabled: false,
     devAutoUpdateEvery: 10,
     devManualMsgCount: 10,
@@ -324,6 +325,7 @@ const DEFAULT_SETTINGS = {
     tbRestoreAfterPluginEnable: false,
     novelLibrary: [],     // 小说快照库 [{name, key, snapshot}]
     // 世界设定注入设置
+    worldInjectionEnabled: true,
     worldInjPos:   2,   // 默认主提示前
     worldInjDepth: 4,
     worldInjRole:  0,
@@ -737,6 +739,7 @@ function niSaveSettings({ scheduleAutosave = true } = {}) {
     cfg.devInjPos   = niCfgInt('#ni-dev-inj-pos', DEFAULT_SETTINGS.devInjPos);
     cfg.devInjDepth = niCfgInt('#ni-dev-inj-depth', DEFAULT_SETTINGS.devInjDepth);
     cfg.devInjRole  = niCfgInt('#ni-dev-inj-role', DEFAULT_SETTINGS.devInjRole);
+    cfg.devInjectionEnabled = q('#ni-dev-injection-enabled')?.checked ?? (cfg.devInjectionEnabled ?? DEFAULT_SETTINGS.devInjectionEnabled);
     cfg.devAutoUpdateEnabled = q('#ni-dev-auto-enabled')?.checked ?? (cfg.devAutoUpdateEnabled ?? DEFAULT_SETTINGS.devAutoUpdateEnabled);
     cfg.devAutoUpdateEvery = niCfgBoundInt('#ni-dev-auto-every', DEFAULT_SETTINGS.devAutoUpdateEvery, 1, 9999);
     cfg.devManualMsgCount = niCfgBoundInt('#ni-dev-manual-msg-count', DEFAULT_SETTINGS.devManualMsgCount, 1, 200);
@@ -789,6 +792,7 @@ function niSaveSettings({ scheduleAutosave = true } = {}) {
     cfg._cleanDone     = S.cleanDone;
     cfg._worldCategories = niGetWorldCategories();
     niClearLegacyDeviationSettings();
+    cfg.worldInjectionEnabled = q('#ni-world-injection-enabled')?.checked ?? (cfg.worldInjectionEnabled ?? DEFAULT_SETTINGS.worldInjectionEnabled);
     cfg.worldInjPos   = parseInt(q('#ni-world-inj-pos')?.value)   ?? DEFAULT_SETTINGS.worldInjPos;
     cfg.worldInjDepth = parseInt(q('#ni-world-inj-depth')?.value)  ?? DEFAULT_SETTINGS.worldInjDepth;
     cfg.worldInjRole  = parseInt(q('#ni-world-inj-role')?.value)   ?? DEFAULT_SETTINGS.worldInjRole;
@@ -999,6 +1003,8 @@ function syncSettingsToUI() {
     sv('#ni-dev-inj-pos', cfg.devInjPos  ?? DEFAULT_SETTINGS.devInjPos);
     sv('#ni-dev-inj-depth',cfg.devInjDepth?? DEFAULT_SETTINGS.devInjDepth);
     sv('#ni-dev-inj-role',cfg.devInjRole ?? DEFAULT_SETTINGS.devInjRole);
+    const devInjectionEl = q('#ni-dev-injection-enabled');
+    if (devInjectionEl) devInjectionEl.checked = cfg.devInjectionEnabled ?? DEFAULT_SETTINGS.devInjectionEnabled;
     sv('#ni-dev-auto-every', niBoundIntValue(cfg.devAutoUpdateEvery, DEFAULT_SETTINGS.devAutoUpdateEvery, 1, 9999));
     sv('#ni-dev-manual-msg-count', cfg.devManualMsgCount ?? DEFAULT_SETTINGS.devManualMsgCount);
     const devAutoEl = q('#ni-dev-auto-enabled');
@@ -1014,6 +1020,8 @@ function syncSettingsToUI() {
     sv('#ni-world-inj-pos',  cfg.worldInjPos   ?? DEFAULT_SETTINGS.worldInjPos);
     sv('#ni-world-inj-depth',cfg.worldInjDepth ?? DEFAULT_SETTINGS.worldInjDepth);
     sv('#ni-world-inj-role', cfg.worldInjRole  ?? DEFAULT_SETTINGS.worldInjRole);
+    const worldInjectionEl = q('#ni-world-injection-enabled');
+    if (worldInjectionEl) worldInjectionEl.checked = cfg.worldInjectionEnabled ?? DEFAULT_SETTINGS.worldInjectionEnabled;
     // 文风设置
     sv('#ni-style-inj-pos2',  cfg.styleInjPos   ?? DEFAULT_SETTINGS.styleInjPos);
     sv('#ni-style-inj-depth2',cfg.styleInjDepth ?? DEFAULT_SETTINGS.styleInjDepth);
@@ -3432,7 +3440,7 @@ async function onPromptReady(eventData) {
     const worldDepth = cfg.worldInjDepth ?? DEFAULT_SETTINGS.worldInjDepth;
     const worldRole  = cfg.worldInjRole  ?? DEFAULT_SETTINGS.worldInjRole;
     const worldContent = niBuildWorldInjectionText(niGetWorldCategories());
-    if (worldContent) {
+    if (cfg.worldInjectionEnabled !== false && worldContent) {
         doInject(`${EXT_NAME}_world`, worldContent, worldPos, worldDepth, worldRole);
     }
 
@@ -3447,7 +3455,7 @@ async function onPromptReady(eventData) {
 
     // ── 偏差注入 ──
     const deviationGuide = niGetDeviationGuideText({ preferUI: true }).trim();
-    if (deviationGuide) {
+    if (cfg.devInjectionEnabled !== false && deviationGuide) {
         S.deviationGuide = deviationGuide;
         const devPos   = cfg.devInjPos   ?? DEFAULT_SETTINGS.devInjPos;
         const devDepth = cfg.devInjDepth ?? DEFAULT_SETTINGS.devInjDepth;
@@ -3954,11 +3962,15 @@ jQuery(async () => {
         if (panel) panel.classList.toggle('open', !isOpen);
     });
 
+    // 偏差分析与世界设定的总注入开关只控制发送，不删除或停更已有数据。
+    $app.on('change', '#ni-dev-injection-enabled, #ni-world-injection-enabled', () => niSaveSettings());
+
     // 世界设定注入设置 change
     $app.on('input change', '#ni-world-inj-pos, #ni-world-inj-depth, #ni-world-inj-role', () => niSaveSettings());
 
     // 世界设定模块：展开/收起
-    $app.on('click', '#ni-world-toggle-head', () => {
+    $app.on('click', '#ni-world-toggle-head', event => {
+        if (event.target?.closest?.('.ni-module-injection-toggle')) return;
         const body = q('#ni-world-body-wrap');
         const icon = q('#ni-world-chevron');
         if (!body) return;

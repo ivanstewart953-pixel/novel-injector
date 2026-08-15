@@ -1,8 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-
-const source = await readFile(new URL('./lib/memory-system.js', import.meta.url), 'utf8');
-const memory = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+const memory = await import(new URL('./lib/memory-system.js', import.meta.url));
 
 const {
     niMemoryApplyCompaction,
@@ -14,7 +11,9 @@ const {
     niMemoryGetCompactionGroup,
     niMemoryHashText,
     niMemoryInvalidateChangedRanges,
+    niMemoryIsStoryMessage,
     niMemoryNormalizeCompactionPayload,
+    niMemoryNormalizeChatMessages,
     niMemoryNormalizeLeafPayload,
     niMemoryRecall,
     niMemoryTokenize,
@@ -31,6 +30,27 @@ function messages(from, to, text = floor => `第${floor}层的普通对话`) {
             mes: typeof text === 'function' ? text(floor) : text,
         };
     });
+}
+
+{
+    const hiddenHistory = Array.from({ length: 25 }, (_, floor) => ({
+        mes_id: floor,
+        is_user: floor % 2 === 0,
+        is_system: floor > 0 && floor < 20,
+        name: floor % 2 === 0 ? '用户' : '林默',
+        mes: `第${floor}层剧情`,
+    }));
+    const normalized = niMemoryNormalizeChatMessages([
+        ...hiddenHistory,
+        { mes_id: 25, is_system: true, name: 'SillyTavern System', mes: '真正的系统消息' },
+        { mes_id: 26, role: 'system', mes: '系统角色消息' },
+    ]);
+    assert.equal(normalized.length, 25);
+    assert.deepEqual(normalized.map(item => item.floor), Array.from({ length: 25 }, (_, floor) => floor));
+    assert.equal(niMemoryIsStoryMessage(hiddenHistory[1]), true);
+    assert.equal(niMemoryIsStoryMessage({ is_system: true, name: 'SillyTavern System' }), false);
+    const firstBatch = niMemoryBuildNextBatch(hiddenHistory, niMemoryCreateEmptyStore(), 10, { force: true });
+    assert.deepEqual([firstBatch.startFloor, firstBatch.endFloor], [0, 9]);
 }
 
 function leafFor(startFloor, endFloor, payload = {}) {

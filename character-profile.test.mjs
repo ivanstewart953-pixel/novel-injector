@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./lib/story-data.js', import.meta.url), 'utf8');
-const story = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+const story = await import(new URL('./lib/story-data.js', import.meta.url));
 
 const { niBuildCharacterHistoryContext, niSelectCharacterEvidenceMessages } = story;
 
@@ -103,9 +103,22 @@ const deviation = {
     assert.match(result.text, /嘴硬，但在危险时会先保护同伴/);
     assert.match(result.text, /口头拒绝冒险，却在沈青受伤后折返掩护/);
     assert.match(result.text, /重视自主/);
-    assert.match(result.text, /退出原著阵营/);
+    assert.doesNotMatch(result.text, /退出原著阵营/);
     assert.doesNotMatch(result.text, /赵四离开城门/);
     assert.doesNotMatch(result.text, /城门今晚关闭/);
+}
+
+{
+    const result = niBuildCharacterHistoryContext({
+        branchMemory: {
+            leaves: [{ startFloor: 151, endFloor: 160, summary: '赵四离开城门。', entities: ['赵四'], events: [] }],
+        },
+        deviation,
+        terms: ['林默'],
+    });
+    assert.equal(result.hasTargetEvidence, true);
+    assert.match(result.text, /旧版偏差事实（回退）/);
+    assert.match(result.text, /退出原著阵营/);
 }
 
 {
@@ -126,16 +139,20 @@ const deviation = {
 
 {
     const direct = niSelectCharacterEvidenceMessages([
+        { is_system: true, is_user: false, name: '沈青', mes: '林默收起了钥匙。' },
         { is_user: true, name: '用户', mes: '我们先去看看。' },
         { is_user: false, name: 'AI', mes: '林默没有回答，却把钥匙递给沈青。' },
         { is_user: true, name: '用户', mes: '那就一起走。' },
         { is_user: false, name: 'AI', mes: '赵四留在原地。' },
+        { is_system: true, name: 'SillyTavern System', mes: '系统提示：林默测试。' },
     ], ['林默']);
     assert.equal(direct.hasTargetEvidence, true);
     assert.match(direct.recentChat, /我们先去看看/);
     assert.match(direct.recentChat, /林默没有回答/);
     assert.match(direct.recentChat, /那就一起走/);
     assert.doesNotMatch(direct.recentChat, /赵四留在原地/);
+    assert.doesNotMatch(direct.recentChat, /系统提示/);
+    assert.match(direct.recentChat, /林默收起了钥匙/);
 }
 
 for (const required of [
