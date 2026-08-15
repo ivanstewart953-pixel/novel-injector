@@ -53,6 +53,32 @@ function messages(from, to, text = floor => `第${floor}层的普通对话`) {
     assert.deepEqual([firstBatch.startFloor, firstBatch.endFloor], [0, 9]);
 }
 
+{
+    const history = Array.from({ length: 12 }, (_, floor) => ({
+        mes_id: floor,
+        is_system: floor === 4,
+        is_user: floor % 2 === 0,
+        role: floor % 2 === 0 ? 'user' : 'assistant',
+        name: floor % 2 === 0 ? '用户' : '角色',
+        mes: `第${floor}楼剧情`,
+    }));
+    const legacyBatch = niMemoryBuildNextBatch(
+        history.filter(message => message.is_system !== true),
+        niMemoryCreateEmptyStore(),
+        20,
+        { force: true },
+    );
+    const legacyLeaf = niMemoryNormalizeLeafPayload({
+        summary: '升级前生成的正常总结',
+        events: [{ text: '旧规则下的事件', actors: ['角色'], importance: 3, certainty: 'confirmed' }],
+    }, legacyBatch);
+    delete legacyLeaf.sourceFloors;
+    const legacyStore = niMemoryApplyLeaf(niMemoryCreateEmptyStore(), legacyLeaf);
+    const checked = niMemoryInvalidateChangedRanges(legacyStore, history);
+    assert.equal(checked.invalidatedFrom, null);
+    assert.equal(checked.store.leaves.length, 1);
+}
+
 function leafFor(startFloor, endFloor, payload = {}) {
     const sourceMessages = messages(startFloor, endFloor);
     const batch = {
