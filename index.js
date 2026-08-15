@@ -1,5 +1,5 @@
 ﻿/**
- * Novel Injector - 小说上下文注入插件
+ * Novel Injector Plus - 分支记忆增强版
  * 功能：上传小说 → 分段清洗压缩 → 提取剧情/角色 → 向量化 → 按阶段开关动态注入酒馆上下文
 */
 
@@ -202,6 +202,8 @@ import {
 // ============================================================
 // 常量
 // ============================================================
+// 保留原版设置命名空间，让 Plus 直接读取已有小说库、聊天状态与 API 设置。
+// 安装目录由仓库名 novel-injector-plus 区分；原版与 Plus 不应同时启用。
 const EXT_NAME = 'novel-injector';
 const NI_USER_SUB_CHAT_META_KEY = 'novelInjectorUserSub';
 const NI_USER_SUB_CHAT_MIGRATION_KEY = '_userSubChatConfigMigrationV1';
@@ -3638,7 +3640,7 @@ jQuery(async () => {
         <div class="drawer-toggle">
           <div id="ni_drawer_icon"
                class="drawer-icon fa-solid fa-book-open fa-fw closedIcon interactable"
-               title="Novel Injector - 小说注入"
+               title="Novel Injector Plus - 分支记忆增强版"
                tabindex="0">
           </div>
         </div>
