@@ -3356,7 +3356,7 @@ async function onPromptReady(eventData) {
                     const p = aiProfile;
                     if (p.identity)    lines.push(`当前身份、目标与处境：${p.identity}`);
                     if (p.appearance)  lines.push(`当前持续外貌或状态：${p.appearance}`);
-                    if (p.personality) lines.push(`当前决策倾向与行为证据：${p.personality}`);
+                    if (p.personality) lines.push(`当前性格调色盘、动因与多面表现：${p.personality}`);
                     if (p.relations)   lines.push(`当前关系、变化依据与张力：${p.relations}`);
                 } else {
                     lines.push(aiProfile);
@@ -3373,8 +3373,9 @@ async function onPromptReady(eventData) {
                 ? '说明：以下为原著角色资料。标记为“用户扮演原著角色资料：<user>”的条目属于 <user> 的既有身份与人物基础，不是独立NPC；其他角色仍作为NPC演绎。'
                 : '说明：以下为原著角色NPC资料。已由“用户代入角色”映射到 <user> 的原著角色不会在此处作为独立NPC发送；其他角色仍作为NPC演绎。')
             : '说明：以下原著角色默认作为故事中的独立NPC处理，不默认等同于 <user>；不要把原著角色经历、剧情事件、身份关系或原著角色曾经做出的选择自动映射到 <user>。';
-        const charLayeringRule = '分层规则：“原著稳定档案”提供人物内核与既有事实；“当前分支状态”只记录近期对话中已经明确成立的变化。当前状态与原著档案直接冲突时以当前状态为准；当前状态未提及的部分继续继承原著档案，不得视为被删除。';
-        const charContent = `[原著角色人设]\n${charIntro}\n${charLayeringRule}\n\n${charLines.join('\n\n')}\n[/原著角色人设]`;
+        const charLayeringRule = '分层规则：“原著稳定档案”提供人物内核与既有事实；“当前分支状态”综合近期直接证据与分支历史总结。两者冲突时以发生更晚、证据更直接的当前分支事实为准；未被新证据推翻的既有部分继续保留。';
+        const charActingRule = '演绎规则：先用底色与主色保持连贯，再按对象、关系和处境调用副色及衍生反应；二次解释是行为动因，三面性是关系差异。不要每轮同时展示全部特征，也不要把单一标签夸张成固定反应。';
+        const charContent = `[原著角色人设]\n${charIntro}\n${charLayeringRule}\n${charActingRule}\n\n${charLines.join('\n\n')}\n[/原著角色人设]`;
         doInject(`${EXT_NAME}_char`, charContent, charPos, charDepth, charRole);
     }
 
