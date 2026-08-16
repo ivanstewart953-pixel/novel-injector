@@ -274,8 +274,9 @@ const DEFAULT_SETTINGS = {
     // 当前跑团分支长期记忆；召回默认完全在浏览器本地完成，不要求向量 API。
     branchMemoryEnabled: false,
     branchMemoryBatchSize: 10,
-    branchMemoryTopK: 5,
-    branchMemoryTokenBudget: 2800,
+    branchMemoryBatchTokenLimit: 16000,
+    branchMemoryTopK: 6,
+    branchMemoryTokenBudget: 3600,
     branchMemoryOriginalTokenBudget: 1000,
     branchMemoryRecentCount: 4,
     branchMemoryEpisodeSize: 8,
@@ -570,6 +571,13 @@ function niLoadSettings() {
             saved.plotInjMaxTokens = DEFAULT_SETTINGS.plotInjMaxTokens;
         }
         saved._rawInjectionDefault32000Initialized = true;
+        saveSettingsDebounced();
+    }
+    if (saved._branchMemoryDetailDefaultsV2Initialized !== true) {
+        if (Number(saved.branchMemoryBatchSize) > 10) saved.branchMemoryBatchSize = DEFAULT_SETTINGS.branchMemoryBatchSize;
+        if (Number(saved.branchMemoryTopK) === 5) saved.branchMemoryTopK = DEFAULT_SETTINGS.branchMemoryTopK;
+        if (Number(saved.branchMemoryTokenBudget) === 2800) saved.branchMemoryTokenBudget = DEFAULT_SETTINGS.branchMemoryTokenBudget;
+        saved._branchMemoryDetailDefaultsV2Initialized = true;
         saveSettingsDebounced();
     }
     if (niNormalizeVectorInjectionPreference(saved)) saveSettingsDebounced();
