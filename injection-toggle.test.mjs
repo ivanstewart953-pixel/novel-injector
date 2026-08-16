@@ -11,6 +11,7 @@ for (const setting of ['devInjectionEnabled: true', 'worldInjectionEnabled: true
 }
 
 assert.match(source, /cfg\.devInjectionEnabled !== false && deviationGuide/);
+assert.match(source, /niBuildDeviationInjectionGuide\(niGetDeviationSections\(\)/);
 assert.match(source, /cfg\.worldInjectionEnabled !== false && worldContent/);
 assert.match(template, /id="ni-dev-injection-enabled"/);
 assert.match(template, /id="ni-world-injection-enabled"/);
