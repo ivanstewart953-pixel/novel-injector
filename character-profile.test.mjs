@@ -280,4 +280,16 @@ for (const required of [
     assert.ok(source.includes(required), `角色提示词缺少：${required}`);
 }
 
+{
+    const applyStart = source.indexOf('async function niApplyCharAiProfile');
+    const applyEnd = source.indexOf('async function niGenCharsManual', applyStart);
+    const applySource = source.slice(applyStart, applyEnd);
+    const eyeDeclaration = applySource.indexOf('const aiEyeOn = niGetCharAiShowEnabled(i);');
+    const profileElementLookup = applySource.indexOf('let aipEl = q(');
+    assert.ok(applyStart >= 0 && applyEnd > applyStart, '应能定位实时人设应用函数');
+    assert.ok(eyeDeclaration >= 0, '实时人设应用函数必须声明 aiEyeOn');
+    assert.ok(eyeDeclaration < profileElementLookup, 'aiEyeOn 必须在首次创建人设卡片前声明');
+    assert.equal((applySource.match(/const aiEyeOn/g) || []).length, 1, 'aiEyeOn 不应只在内部更新分支中重复声明');
+}
+
 console.log('character profile tests passed');
