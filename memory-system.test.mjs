@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 const memory = await import(new URL('./lib/memory-system.js', import.meta.url));
 
 const {
+    NI_BRANCH_MEMORY_SCHEMA_VERSION,
     niMemoryApplyCompaction,
     niMemoryApplyLeaf,
+    niMemoryBuildContinuitySnapshot,
     niMemoryBuildInjection,
     niMemoryBuildCompactionRecords,
     niMemoryBuildNextBatch,
@@ -16,6 +18,8 @@ const {
     niMemoryNormalizeCompactionPayload,
     niMemoryNormalizeChatMessages,
     niMemoryNormalizeLeafPayload,
+    niMemoryNormalizeStore,
+    niMemoryCanonicalStateField,
     niMemoryRecall,
     niMemoryRecallEventDetails,
     niMemoryTokenize,
@@ -200,6 +204,57 @@ function leafFor(startFloor, endFloor, payload = {}) {
 }
 
 {
+    const legacy = {
+        schemaVersion: 1,
+        processedThrough: 1009,
+        leaves: [
+            {
+                ...leafFor(200, 209, {
+                    state_changes: [{ entity: '林默', field: 'location', value: '王都', operation: 'set', evidence_floors: [208] }],
+                }),
+                events: [{ text: '林默曾经停留在王都', actors: ['林默'], locations: ['王都'], evidenceFloors: [208] }],
+            },
+            leafFor(1000, 1009, {
+                state_changes: [{ entity: '林默', field: 'position', value: '北境港口', operation: 'set', evidence_floors: [1008] }],
+            }),
+        ],
+        currentState: {
+            oldLocation: { entity: '林默', field: 'location', value: '王都', updatedFloor: 209, evidenceFloors: [208] },
+            newPosition: { entity: '林默', field: 'position', value: '北境港口', updatedFloor: 1009, evidenceFloors: [1008] },
+        },
+        knowledge: {},
+        openThreads: {},
+    };
+    const migrated = niMemoryNormalizeStore(legacy);
+    assert.equal(migrated.schemaVersion, NI_BRANCH_MEMORY_SCHEMA_VERSION);
+    assert.equal(niMemoryCanonicalStateField('当前位置'), 'location');
+    assert.equal(Object.keys(migrated.currentState).length, 1);
+    assert.equal(Object.values(migrated.currentState)[0].field, 'location');
+    assert.equal(Object.values(migrated.currentState)[0].value, '北境港口');
+    assert.equal(migrated.leaves[0].events[0].lifecycle, 'completed');
+}
+
+{
+    let store = niMemoryCreateEmptyStore();
+    const opened = leafFor(0, 9, {
+        open_threads: [{ key: '归还密钥', text: '林默需要归还艾琳的密钥', status: 'open', participants: ['林默', '艾琳'], evidence_floors: [9] }],
+    });
+    store = niMemoryApplyLeaf(store, opened);
+    const threadId = Object.values(store.openThreads)[0].id;
+    store = niMemoryApplyLeaf(store, leafFor(10, 19, {
+        open_threads: [{
+            thread_id: threadId,
+            key: '密钥已经交还',
+            text: '林默已经把密钥交还艾琳',
+            status: 'resolved',
+            participants: ['林默', '艾琳'],
+            evidence_floors: [19],
+        }],
+    }));
+    assert.equal(Object.keys(store.openThreads).length, 0);
+}
+
+{
     const events = Array.from({ length: 20 }, (_, index) => ({
         kind: 'action',
         text: `归档事件${index}`,
@@ -273,6 +328,43 @@ function leafFor(startFloor, endFloor, payload = {}) {
 }
 
 {
+    let store = niMemoryCreateEmptyStore();
+    store = niMemoryApplyLeaf(store, leafFor(0, 9, {
+        summary: '赵四在南城采购普通食物。',
+        events: [{ text: '赵四买了面包', actors: ['赵四'], locations: ['南城'], importance: 5, certainty: 'explicit', evidence_floors: [8] }],
+        state_changes: [{ entity: '赵四', field: 'position', value: '南城', operation: 'set', evidence_floors: [8] }],
+    }));
+    store = niMemoryApplyLeaf(store, leafFor(10, 19, {
+        summary: '艾琳在灯塔取得黑曜密钥。',
+        events: [{ text: '艾琳取得黑曜密钥', actors: ['艾琳'], locations: ['灯塔'], objects: ['黑曜密钥'], importance: 3, certainty: 'explicit', evidence_floors: [18] }],
+    }));
+    const recalled = niMemoryRecall(store, '艾琳询问黑曜密钥', { topK: 6 });
+    assert.equal(recalled.length, 1);
+    assert.equal(recalled[0].startFloor, 10);
+    const injection = niMemoryBuildInjection(store, '艾琳询问黑曜密钥', {
+        topK: 6,
+        tokenBudget: 1000,
+        continuityFirewall: '【不可回滚约束】\n- 密钥已经交给艾琳，不得恢复为尚未取得。',
+    });
+    assert.doesNotMatch(injection, /赵四|南城|面包/);
+    assert.match(injection, /连续性防火墙/);
+    assert.match(injection, /不得恢复/);
+    assert.match(injection, /已结束的相关事件细节/);
+}
+
+{
+    let store = niMemoryCreateEmptyStore();
+    store = niMemoryApplyLeaf(store, leafFor(0, 9, {
+        state_changes: [{ entity: '林默', field: 'position', value: '旧王都', operation: 'set', evidence_floors: [8] }],
+    }));
+    for (let index = 1; index < 8; index++) store = niMemoryApplyLeaf(store, leafFor(index * 10, index * 10 + 9));
+    const injection = niMemoryBuildInjection(store, '林默现在的情况', { topK: 3, tokenBudget: 900 });
+    assert.match(injection, /最后已知·非当前确认/);
+    assert.doesNotMatch(injection, /【当前场景】林默／location：旧王都/);
+    assert.match(niMemoryBuildContinuitySnapshot(store, '林默现在的情况'), /最后已知·非当前确认/);
+}
+
+{
     const tokens = niMemoryTokenize('艾琳拿走黑曜密钥，Alice entered North-Port.');
     assert.ok(tokens.includes('艾琳'));
     assert.ok(tokens.includes('黑曜'));
@@ -319,15 +411,15 @@ function leafFor(startFloor, endFloor, payload = {}) {
     }
     const recalled = niMemoryRecall(store, '林默继续追查黑曜密钥', { topK: 6, currentWindowLeaves: 12 });
     assert.equal(recalled.length, 6);
-    assert.equal(recalled.filter(item => item.recallPool === 'current').length, 3);
-    assert.equal(recalled.filter(item => item.recallPool === 'historical').length, 3);
+    assert.equal(recalled.filter(item => item.recallPool === 'current').length, 4);
+    assert.equal(recalled.filter(item => item.recallPool === 'historical').length, 2);
     const details = niMemoryRecallEventDetails(store, '黑曜密钥', { documents: recalled, limit: 6 });
-    assert.equal(details.filter(item => item.recallPool === 'current').length, 3);
-    assert.equal(details.filter(item => item.recallPool === 'historical').length, 3);
+    assert.equal(details.filter(item => item.recallPool === 'current').length, 4);
+    assert.equal(details.filter(item => item.recallPool === 'historical').length, 2);
 }
 
 {
-    const chat = messages(0, 9);
+    const chat = messages(0, 9, floor => floor === 9 ? '林默抵达北境港口。' : `第${floor}层的普通对话`);
     let saves = 0;
     const elements = {
         '#ni-memory-status': { textContent: '' },
@@ -379,6 +471,7 @@ function leafFor(startFloor, endFloor, payload = {}) {
     assert.equal(chat[0].ni_branch_memory.leaves.length, 1);
     assert.equal(extractCall.options.responseLength, 7000);
     assert.match(extractCall.messages[0].content, /【细节保真要求】/);
+    assert.match(extractCall.messages[0].content, /【记忆 V2 连续性要求】/);
     assert.match(extractCall.messages[0].content, /skipped_floors/);
     assert.match(extractCall.messages[0].content, /第 9 楼/);
     assert.match(controller.getInjectionText(chat), /林默／location：北境港口/);

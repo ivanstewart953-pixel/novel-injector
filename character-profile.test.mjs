@@ -13,6 +13,7 @@ const {
     niAdvanceCharacterProfileRetry,
     niCompactCharacterProfileContext,
     niIsCharacterProfileLengthError,
+    niParseContinuityConstraintText,
     niReconcileDeviationFacts,
     niSelectCharacterEvidenceMessages,
 } = story;
@@ -236,6 +237,23 @@ const deviation = {
     assert.doesNotMatch(guide, /仍保留的原著事实|三日后主持会议/);
     assert.doesNotMatch(guide, /无关的日常偏差记录/);
     assert.ok(guide.length <= 900);
+
+    const structuredConstraint = `【不可回滚约束】
+- 议长已经死亡，不得恢复为存活。
+【当前场景约束】
+- 艾琳位于北境港口。有效至：场景变化。
+【已失效的原著前提】
+- 原著中的三日后议会已经不再成立。`;
+    const parsed = niParseContinuityConstraintText(structuredConstraint);
+    assert.equal(parsed.structured, true);
+    assert.deepEqual(parsed.hard, ['议长已经死亡，不得恢复为存活。']);
+    assert.deepEqual(parsed.scene, ['艾琳位于北境港口。有效至：场景变化。']);
+    const firewall = niBuildDeviationInjectionGuide({ facts, currentConstraint: structuredConstraint }, {
+        query: '艾琳在北境港口询问议长', maxFacts: 4, maxChars: 1000, hasBranchMemory: true,
+    });
+    assert.match(firewall, /连续性防火墙·不可回滚约束/);
+    assert.match(firewall, /连续性防火墙·当前场景/);
+    assert.match(firewall, /连续性防火墙·已失效原著前提/);
 
     const context = niBuildDeviationFactsContext(facts);
     assert.equal(context[0].importance, 5);
