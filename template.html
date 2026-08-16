@@ -686,6 +686,13 @@
                   </span>
                 </div>
                 <div class="ni-dev-facts-hint">相对原著已经改变、且目前仍然有效的长期事实</div>
+                <div class="ni-dev-facts-toolbar">
+                  <input type="search" id="ni-dev-facts-search" placeholder="搜索事实、人物或楼层…" autocomplete="off">
+                  <button type="button" class="ni-dev-facts-filter" id="ni-dev-facts-garbled" aria-pressed="false" title="只显示包含替换字符、控制字符或常见编码损坏标记的条目">疑似乱码</button>
+                  <span id="ni-dev-facts-count" class="ni-dev-facts-count">0 / 0 条</span>
+                  <button type="button" class="ni-dev-facts-page" id="ni-dev-facts-newer">较新</button>
+                  <button type="button" class="ni-dev-facts-page" id="ni-dev-facts-older">较早</button>
+                </div>
                 <div id="ni-dev-facts-list" class="ni-dev-facts-list"></div>
                 <div id="ni-dev-facts-history" class="ni-dev-facts-history" hidden></div>
               </div>

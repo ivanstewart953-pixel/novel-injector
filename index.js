@@ -3084,6 +3084,7 @@ const {
     niSaveDeviationGuideNow,
     niQueueDeviationGuideSave,
     niSyncDeviationResultUI,
+    niRenderDeviationFactNotebook,
     niDevButtonLabel,
     niDevAutoEvery,
     niDevRecentMessageLimit,
@@ -4149,7 +4150,17 @@ jQuery(async () => {
         if (!panel) return;
         const open = panel.hidden;
         panel.hidden = !open;
+        if (open && panel.dataset.page == null) panel.dataset.page = '0';
         this.setAttribute('aria-expanded', String(open));
+        niRenderDeviationFactNotebook();
+    });
+    $app.on('click', '#ni-dev-history-older, #ni-dev-history-newer', function(e) {
+        e.preventDefault();
+        const panel = q('#ni-dev-facts-history');
+        if (!panel || this.disabled) return;
+        const page = Math.max(0, parseInt(panel.dataset.page, 10) || 0);
+        panel.dataset.page = String(Math.max(0, page + (this.id === 'ni-dev-history-older' ? 1 : -1)));
+        niRenderDeviationFactNotebook();
     });
     $app.on('click', '#ni-dev-facts-history-clear', async function(e) {
         e.preventDefault();
@@ -4163,9 +4174,11 @@ jQuery(async () => {
     $app.on('click', '#ni-dev-facts-edit-toggle', async function() {
         const editing = this.getAttribute('aria-expanded') === 'true';
         if (!editing) {
+            const list = q('#ni-dev-facts-list');
+            if (list) list.dataset.removedFactIds = '[]';
             this.setAttribute('aria-expanded', 'true');
             this.textContent = '保存';
-            niSyncDeviationResultUI({ preserveBody: true });
+            niRenderDeviationFactNotebook();
             const firstInput = q('#ni-dev-facts-list')?.querySelector('.ni-dev-fact-inline-input');
             niResizeDeviationFactInlineInput(firstInput);
             firstInput?.focus();
@@ -4184,10 +4197,41 @@ jQuery(async () => {
     $app.on('input', '.ni-dev-fact-inline-input', function() {
         niResizeDeviationFactInlineInput(this);
     });
+    $app.on('input', '#ni-dev-facts-search', function() {
+        const list = q('#ni-dev-facts-list');
+        if (!list || this.disabled) return;
+        list.dataset.page = '0';
+        niRenderDeviationFactNotebook();
+    });
+    $app.on('click', '#ni-dev-facts-garbled', function(e) {
+        e.preventDefault();
+        if (this.disabled) return;
+        const pressed = this.getAttribute('aria-pressed') === 'true';
+        this.setAttribute('aria-pressed', String(!pressed));
+        const list = q('#ni-dev-facts-list');
+        if (list) list.dataset.page = '0';
+        niRenderDeviationFactNotebook();
+    });
+    $app.on('click', '#ni-dev-facts-older, #ni-dev-facts-newer', function(e) {
+        e.preventDefault();
+        const list = q('#ni-dev-facts-list');
+        if (!list || this.disabled) return;
+        const page = Math.max(0, parseInt(list.dataset.page, 10) || 0);
+        list.dataset.page = String(Math.max(0, page + (this.id === 'ni-dev-facts-older' ? 1 : -1)));
+        niRenderDeviationFactNotebook();
+    });
     $app.on('click', '.ni-dev-fact-remove', function(e) {
         e.preventDefault();
         const row = this.closest('.ni-dev-fact-row-editing');
         if (!row) return;
+        const list = q('#ni-dev-facts-list');
+        const factId = row.querySelector('.ni-dev-fact-inline-input')?.dataset.factId || '';
+        if (list && factId) {
+            let removed = [];
+            try { removed = JSON.parse(list.dataset.removedFactIds || '[]'); } catch (_) { removed = []; }
+            if (!removed.includes(factId)) removed.push(factId);
+            list.dataset.removedFactIds = JSON.stringify(removed);
+        }
         const nextInput = row.nextElementSibling?.querySelector?.('.ni-dev-fact-inline-input')
             || row.previousElementSibling?.querySelector?.('.ni-dev-fact-inline-input');
         row.remove();

@@ -3808,6 +3808,61 @@ select.ni-modal-input {
     line-height: 1.5;
     color: var(--color-text-tertiary);
 }
+.ni-dev-facts-toolbar,
+.ni-dev-history-pager {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    margin-top: 4px;
+}
+.ni-dev-facts-toolbar input {
+    flex: 1 1 150px;
+    min-width: 90px;
+    height: 27px;
+    padding: 3px 7px;
+    border: 1px solid var(--color-border-primary);
+    border-radius: 6px;
+    background: var(--color-background-secondary);
+    color: var(--color-text-primary);
+    font-size: 11px;
+}
+.ni-dev-facts-filter,
+.ni-dev-facts-page,
+.ni-dev-history-pager button {
+    flex: 0 0 auto;
+    min-height: 25px;
+    padding: 3px 7px;
+    border: 1px solid var(--color-border-primary);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-text-tertiary);
+    font-size: 10px;
+    cursor: pointer;
+}
+.ni-dev-facts-filter[aria-pressed="true"] {
+    border-color: var(--ni-primary);
+    background: var(--ni-primary-alpha-10, rgba(160, 68, 94, .1));
+    color: var(--ni-primary);
+}
+.ni-dev-facts-filter:disabled,
+.ni-dev-facts-page:disabled,
+.ni-dev-history-pager button:disabled {
+    cursor: default;
+    opacity: .38;
+}
+.ni-dev-facts-count,
+.ni-dev-history-pager > span {
+    flex: 0 0 auto;
+    color: var(--color-text-tertiary);
+    font-size: 10px;
+    white-space: nowrap;
+}
+.ni-dev-history-pager {
+    justify-content: flex-end;
+    padding: 5px 0;
+    border-bottom: .5px solid var(--color-border-secondary);
+}
 .ni-dev-facts-list,
 .ni-dev-facts-history {
     display: flex;
@@ -3895,6 +3950,15 @@ select.ni-modal-input {
     background: var(--color-background-secondary);
     color: var(--ni-primary, #A0445E);
     font-size: 10px;
+    line-height: 1.35;
+}
+.ni-dev-fact-garbled {
+    flex: 0 0 auto;
+    padding: 2px 6px;
+    border-radius: 10px;
+    background: rgba(210, 120, 35, .12);
+    color: #d07a23;
+    font-size: 9px;
     line-height: 1.35;
 }
 .ni-dev-fact-text,
