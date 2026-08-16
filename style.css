@@ -3437,7 +3437,7 @@ select.ni-modal-input {
     border-radius: 4px;
     background: var(--color-background-secondary);
 }
-.ni-memory-item span {
+.ni-memory-item > .ni-memory-range {
     color: var(--ni-primary-focus, #B8336A);
     font-size: 10px;
     font-weight: 600;
@@ -3447,6 +3447,49 @@ select.ni-modal-input {
     color: var(--color-text-secondary);
     font-size: 11px;
     line-height: 1.55;
+}
+.ni-memory-detail-box {
+    margin-top: 7px;
+    padding-top: 6px;
+    border-top: .5px solid var(--color-border-tertiary);
+}
+.ni-memory-detail-box > summary {
+    color: var(--ni-primary-focus, #B8336A);
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 600;
+    user-select: none;
+}
+.ni-memory-detail-box > div {
+    display: grid;
+    gap: 8px;
+    margin-top: 7px;
+}
+.ni-memory-detail-box section > strong {
+    color: var(--color-text-primary);
+    font-size: 10px;
+}
+.ni-memory-detail-box ul {
+    display: grid;
+    gap: 4px;
+    margin: 4px 0 0;
+    padding-left: 17px;
+}
+.ni-memory-detail-box li {
+    color: var(--color-text-secondary);
+    font-size: 10px;
+    line-height: 1.5;
+}
+.ni-memory-detail-box li > span {
+    display: block;
+    margin-bottom: 1px;
+    color: var(--color-text-tertiary);
+    font-size: 9px;
+}
+.ni-memory-detail-box q {
+    display: block;
+    margin-top: 2px;
+    color: var(--color-text-tertiary);
 }
 .ni-memory-empty {
     padding: 8px;

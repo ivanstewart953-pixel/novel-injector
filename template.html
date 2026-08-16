@@ -591,14 +591,17 @@
         <p class="ni-desc">当前聊天是分支正史；每批生成带证据楼层的事实账本，本地分层检索后少量注入。原著冲突内容自动降为参考。</p>
         <div id="ni-memory-cfg-panel" hidden>
           <div class="ni-memory-grid">
-            <label>每批楼层
-              <input type="number" id="ni-memory-batch-size" value="10" min="2" max="50">
+            <label>每批最多楼层
+              <input type="number" id="ni-memory-batch-size" value="10" min="2" max="10">
+            </label>
+            <label title="达到楼层数或输入 Token 上限都会触发/截分批次；单层过长时仍会单独处理">单批输入上限
+              <span><input type="number" id="ni-memory-batch-token-limit" value="16000" min="2000" max="64000" step="1000"> Token</span>
             </label>
             <label>召回条数
-              <input type="number" id="ni-memory-top-k" value="5" min="1" max="12">
+              <input type="number" id="ni-memory-top-k" value="6" min="1" max="12">
             </label>
             <label>注入预算
-              <span><input type="number" id="ni-memory-token-budget" value="2800" min="400" max="12000" step="100"> Token</span>
+              <span><input type="number" id="ni-memory-token-budget" value="3600" min="400" max="12000" step="100"> Token</span>
             </label>
             <label>原著参考预算
               <span><input type="number" id="ni-memory-original-token-budget" value="1000" min="256" max="6000" step="100"> Token</span>
@@ -607,7 +610,7 @@
               <span><input type="number" id="ni-memory-recent-count" value="4" min="1" max="12"> 条</span>
             </label>
           </div>
-          <div class="ni-memory-help"><i class="ti ti-info-circle"></i>召回使用浏览器本地中文词元、实体、重要度、时间和未完成事项排序；不配置 Embedding API 也能使用。</div>
+          <div class="ni-memory-help"><i class="ti ti-info-circle"></i>默认仍按最多 10 层一次调用；遇到特别长的楼层会按输入 Token 上限提前截批。召回会注入概览和匹配的原子事件细节，不配置 Embedding API 也能使用。</div>
         </div>
         <div class="ni-prompt-box" id="ni-memory-prompt-box">
           <div class="ni-pt-wrap">
