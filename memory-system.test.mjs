@@ -305,6 +305,28 @@ function leafFor(startFloor, endFloor, payload = {}) {
 }
 
 {
+    let store = niMemoryCreateEmptyStore();
+    for (let index = 0; index < 30; index++) {
+        const start = index * 10;
+        store = niMemoryApplyLeaf(store, leafFor(start, start + 9, {
+            summary: `林默围绕黑曜密钥推进第${index}段行动。`,
+            events: [{
+                text: `林默在第${index}段确认黑曜密钥的线索`,
+                actors: ['林默'], objects: ['黑曜密钥'], importance: 3,
+                certainty: 'explicit', evidence_floors: [start + 8],
+            }],
+        }));
+    }
+    const recalled = niMemoryRecall(store, '林默继续追查黑曜密钥', { topK: 6, currentWindowLeaves: 12 });
+    assert.equal(recalled.length, 6);
+    assert.equal(recalled.filter(item => item.recallPool === 'current').length, 3);
+    assert.equal(recalled.filter(item => item.recallPool === 'historical').length, 3);
+    const details = niMemoryRecallEventDetails(store, '黑曜密钥', { documents: recalled, limit: 6 });
+    assert.equal(details.filter(item => item.recallPool === 'current').length, 3);
+    assert.equal(details.filter(item => item.recallPool === 'historical').length, 3);
+}
+
+{
     const chat = messages(0, 9);
     let saves = 0;
     const elements = {

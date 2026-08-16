@@ -87,6 +87,7 @@ import {
     mergeCharacters,
     niComparePlotOrder,
     niBuildDeviationGuideFromSections,
+    niBuildDeviationInjectionGuide,
     niBuildDeviationFactsContext,
     niBuildDeviationFactsText,
     niBuildDeviationSectionsFromAnalysis,
@@ -3462,9 +3463,20 @@ async function onPromptReady(eventData) {
     }
 
     // ── 偏差注入 ──
-    const deviationGuide = niGetDeviationGuideText({ preferUI: true }).trim();
+    const fullDeviationGuide = niGetDeviationGuideText({ preferUI: true }).trim();
+    const deviationQuery = niSelectRecentVectorMessageTexts(
+        chat,
+        cfg.branchMemoryRecentCount ?? DEFAULT_SETTINGS.branchMemoryRecentCount,
+    ).join('\n');
+    const deviationGuide = niBuildDeviationInjectionGuide(niGetDeviationSections(), {
+        query: deviationQuery,
+        maxFacts: branchMemoryActive ? 6 : 8,
+        maxChars: branchMemoryActive ? 1200 : 1800,
+        hasBranchMemory: branchMemoryActive,
+    }).trim();
     if (cfg.devInjectionEnabled !== false && deviationGuide) {
-        S.deviationGuide = deviationGuide;
+        // S 与偏差面板继续保留完整档案；这里只把精简后的执行子集发送给写作模型。
+        S.deviationGuide = fullDeviationGuide;
         const devPos   = cfg.devInjPos   ?? DEFAULT_SETTINGS.devInjPos;
         const devDepth = cfg.devInjDepth ?? DEFAULT_SETTINGS.devInjDepth;
         const devRole  = cfg.devInjRole  ?? DEFAULT_SETTINGS.devInjRole;

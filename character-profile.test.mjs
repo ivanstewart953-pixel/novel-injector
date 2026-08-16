@@ -4,7 +4,13 @@ import { readFile } from 'node:fs/promises';
 const source = await readFile(new URL('./lib/story-data.js', import.meta.url), 'utf8');
 const story = await import(new URL('./lib/story-data.js', import.meta.url));
 
-const { niBuildCharacterHistoryContext, niSelectCharacterEvidenceMessages } = story;
+const {
+    niBuildCharacterHistoryContext,
+    niBuildDeviationFactsContext,
+    niBuildDeviationInjectionGuide,
+    niReconcileDeviationFacts,
+    niSelectCharacterEvidenceMessages,
+} = story;
 
 const branchMemory = {
     currentState: {
@@ -155,12 +161,56 @@ const deviation = {
     assert.match(direct.recentChat, /林默收起了钥匙/);
 }
 
+{
+    const facts = [
+        { id: 'fact:death', text: '议长已经死亡，无法继续主持议会。', kind: 'state', importance: 5, irreversible: true, status: 'active', sourceFloor: 40 },
+        { id: 'fact:key', text: '艾琳持有黑曜密钥，但尚未交给林默。', kind: 'state', importance: 3, irreversible: false, status: 'active', sourceFloor: 120 },
+        ...Array.from({ length: 10 }, (_, index) => ({
+            id: `fact:routine-${index}`,
+            text: `无关的日常偏差记录${index}`,
+            kind: 'event',
+            importance: 1,
+            irreversible: false,
+            status: 'active',
+            sourceFloor: 130 + index,
+        })),
+    ];
+    const guide = niBuildDeviationInjectionGuide({
+        facts,
+        currentConstraint: '艾琳正在北境港口等待林默作出决定。',
+        preservedFacts: '原著中议长将在三日后主持会议。',
+    }, {
+        query: '林默询问艾琳黑曜密钥在哪里',
+        maxFacts: 4,
+        maxChars: 900,
+        hasBranchMemory: true,
+    });
+    assert.match(guide, /议长已经死亡/);
+    assert.match(guide, /艾琳持有黑曜密钥/);
+    assert.match(guide, /艾琳正在北境港口/);
+    assert.doesNotMatch(guide, /仍保留的原著事实|三日后主持会议/);
+    assert.doesNotMatch(guide, /无关的日常偏差记录/);
+    assert.ok(guide.length <= 900);
+
+    const context = niBuildDeviationFactsContext(facts);
+    assert.equal(context[0].importance, 5);
+    assert.equal(context[0].irreversible, true);
+    const reconciled = niReconcileDeviationFacts(facts, [{
+        id: 'fact:death', text: '议长已经死亡，无法继续主持议会。', kind: 'state', sourceFloor: 40,
+    }]);
+    const preserved = reconciled.facts.find(fact => fact.id === 'fact:death');
+    assert.equal(preserved.importance, 5);
+    assert.equal(preserved.irreversible, true);
+}
+
 for (const required of [
     '性格调色盘',
     '二次解释',
     '三面性',
     '近期直接对话 > 分支历史总结 > 上次分支人设 > 原著稳定底稿',
     '总计260字内',
+    'irreversible',
+    'importance',
 ]) {
     assert.ok(source.includes(required), `角色提示词缺少：${required}`);
 }
