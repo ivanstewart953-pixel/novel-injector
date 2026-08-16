@@ -198,6 +198,7 @@ import {
 import {
     BRANCH_MEMORY_EXTRACT_PROMPT,
     createBranchMemoryController,
+    niMemoryBuildContinuitySnapshot,
 } from './lib/memory-system.js';
 
 // ============================================================
@@ -3155,6 +3156,7 @@ const {
     STYLE_PROMPT,
     NI_DEV_CURRENT_TEXT_LIMIT,
     NI_DEV_RECALL_TEXT_LIMIT,
+    niMemoryBuildContinuitySnapshot,
     document,
     alert,
     toastr: globalThis.toastr,
@@ -3453,16 +3455,7 @@ async function onPromptReady(eventData) {
         doInject(`${EXT_NAME}_world`, worldContent, worldPos, worldDepth, worldRole);
     }
 
-    // ── 当前分支长期记忆：靠近最近聊天注入，事实优先级高于全部原著资料 ──
-    const branchMemoryContent = niBranchMemory.getInjectionText(chat);
-    if (branchMemoryContent) {
-        const memoryPos = cfg.branchMemoryInjPos ?? DEFAULT_SETTINGS.branchMemoryInjPos;
-        const memoryDepth = cfg.branchMemoryInjDepth ?? DEFAULT_SETTINGS.branchMemoryInjDepth;
-        const memoryRole = cfg.branchMemoryInjRole ?? DEFAULT_SETTINGS.branchMemoryInjRole;
-        doInject(`${EXT_NAME}_branch_memory`, branchMemoryContent, memoryPos, memoryDepth, memoryRole);
-    }
-
-    // ── 偏差注入 ──
+    // ── 连续性防火墙：由 V2 记忆一并注入；旧偏差注入关闭时仍可生效 ──
     const fullDeviationGuide = niGetDeviationGuideText({ preferUI: true }).trim();
     const deviationQuery = niSelectRecentVectorMessageTexts(
         chat,
@@ -3474,9 +3467,21 @@ async function onPromptReady(eventData) {
         maxChars: branchMemoryActive ? 1200 : 1800,
         hasBranchMemory: branchMemoryActive,
     }).trim();
-    if (cfg.devInjectionEnabled !== false && deviationGuide) {
-        // S 与偏差面板继续保留完整档案；这里只把精简后的执行子集发送给写作模型。
-        S.deviationGuide = fullDeviationGuide;
+    if (fullDeviationGuide) S.deviationGuide = fullDeviationGuide;
+
+    // ── 当前分支长期记忆：硬相关召回 + 状态快照 + 连续性防火墙 ──
+    const branchMemoryContent = niBranchMemory.getInjectionText(chat, {
+        continuityFirewall: deviationGuide,
+    });
+    if (branchMemoryContent) {
+        const memoryPos = cfg.branchMemoryInjPos ?? DEFAULT_SETTINGS.branchMemoryInjPos;
+        const memoryDepth = cfg.branchMemoryInjDepth ?? DEFAULT_SETTINGS.branchMemoryInjDepth;
+        const memoryRole = cfg.branchMemoryInjRole ?? DEFAULT_SETTINGS.branchMemoryInjRole;
+        doInject(`${EXT_NAME}_branch_memory`, branchMemoryContent, memoryPos, memoryDepth, memoryRole);
+    }
+
+    // 没有 V2 记忆内容时保留旧偏差注入作为兼容回退；两者不重复发送。
+    if (!branchMemoryContent && cfg.devInjectionEnabled !== false && deviationGuide) {
         const devPos   = cfg.devInjPos   ?? DEFAULT_SETTINGS.devInjPos;
         const devDepth = cfg.devInjDepth ?? DEFAULT_SETTINGS.devInjDepth;
         const devRole  = cfg.devInjRole  ?? DEFAULT_SETTINGS.devInjRole;

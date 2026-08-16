@@ -588,7 +588,7 @@
           <button class="ni-icon-btn" id="ni-memory-cfg-btn" title="长期记忆设置"><i class="ti ti-settings"></i></button>
           <button class="ni-icon-btn" id="ni-memory-prompt-btn" title="编辑事实抽取提示词"><i class="ti ti-code"></i></button>
         </div>
-        <p class="ni-desc">当前聊天是分支正史；每批生成带证据楼层的事实账本，本地分层检索后少量注入。原著冲突内容自动降为参考。</p>
+        <p class="ni-desc">当前聊天是分支正史；V2 会检索事实账本、最新状态与未决事项，并合并筛选后的连续性防火墙。原著冲突内容自动降为参考。</p>
         <div id="ni-memory-cfg-panel" hidden>
           <div class="ni-memory-grid">
             <label>每批最多楼层
@@ -610,7 +610,7 @@
               <span><input type="number" id="ni-memory-recent-count" value="4" min="1" max="12"> 条</span>
             </label>
           </div>
-          <div class="ni-memory-help"><i class="ti ti-info-circle"></i>默认仍按最多 10 层一次调用；遇到特别长的楼层会按输入 Token 上限提前截批。召回会注入概览和匹配的原子事件细节，不配置 Embedding API 也能使用。</div>
+          <div class="ni-memory-help"><i class="ti ti-info-circle"></i>已有总结会在本地自动升级，无需重新总结。召回条数是上限：没有相关内容时可以为 0；不配置 Embedding API 也能使用。</div>
         </div>
         <div class="ni-prompt-box" id="ni-memory-prompt-box">
           <div class="ni-pt-wrap">
@@ -630,7 +630,7 @@
       <div class="ni-card">
         <div class="ni-ctitle">
           <span class="ni-ctitle-label"><i class="ti ti-ruler-measure"></i>前文偏差分析</span>
-          <label class="ni-memory-enable ni-module-injection-toggle" for="ni-dev-injection-enabled" title="只控制偏差内容是否注入；不会删除结果，也不会改变自动更新设置">
+          <label class="ni-memory-enable ni-module-injection-toggle" for="ni-dev-injection-enabled" title="只控制旧版独立偏差注入；分支长期记忆 V2 的连续性防火墙不受此开关影响">
             <input type="checkbox" id="ni-dev-injection-enabled" checked>
             <span class="ni-cfg-chk"><i class="ti ti-check"></i></span>
             <span>注入</span>
@@ -638,7 +638,7 @@
           <button class="ni-icon-btn" id="ni-dev-cfg-btn" title="偏差分析设置"><i class="ti ti-settings"></i></button>
           <button class="ni-icon-btn" id="ni-dev-prompt-btn" title="编辑提示词"><i class="ti ti-code"></i></button>
         </div>
-        <p class="ni-desc">对比当前对话与当前激活阶段的原著参考内容，分析主线、人物行为、地点、支线的偏差。</p>
+        <p class="ni-desc">对比当前对话与原著参考；结果会整理为不可回滚事实、当前场景约束和已失效原著前提。上方“注入”仅控制旧版独立通道。</p>
         <div id="ni-dev-cfg-panel" hidden>
           <div class="ni-dev-auto-line">
             <label class="ni-dev-setting-label" for="ni-dev-auto-enabled">

@@ -5,9 +5,15 @@ const source = await readFile(new URL('./lib/story-data.js', import.meta.url), '
 const story = await import(new URL('./lib/story-data.js', import.meta.url));
 
 const {
+    NI_CHARACTER_PROFILE_CONTEXT_BUDGETS,
+    NI_CHARACTER_PROFILE_RESPONSE_BUDGETS,
     niBuildCharacterHistoryContext,
     niBuildDeviationFactsContext,
     niBuildDeviationInjectionGuide,
+    niAdvanceCharacterProfileRetry,
+    niCompactCharacterProfileContext,
+    niIsCharacterProfileLengthError,
+    niParseContinuityConstraintText,
     niReconcileDeviationFacts,
     niSelectCharacterEvidenceMessages,
 } = story;
@@ -144,6 +150,46 @@ const deviation = {
 }
 
 {
+    assert.deepEqual([...NI_CHARACTER_PROFILE_RESPONSE_BUDGETS], [4096, 7000, 10000, 12000]);
+    assert.equal(niIsCharacterProfileLengthError(new Error('AI 返回被长度截断')), true);
+    assert.equal(niIsCharacterProfileLengthError(new Error('AI 返回不是完整 JSON')), false);
+    const lengthRetry = niAdvanceCharacterProfileRetry({}, new Error('AI 返回被长度截断'));
+    assert.deepEqual(lengthRetry, {
+        lengthLimited: true,
+        responseBudgetIndex: 1,
+        responseLength: 7000,
+        compactLevel: 1,
+        retryReason: 'length',
+    });
+    const formatRetry = niAdvanceCharacterProfileRetry({}, new Error('AI 返回不是完整 JSON'));
+    assert.equal(formatRetry.responseLength, 4096);
+    assert.equal(formatRetry.compactLevel, 1);
+    assert.equal(formatRetry.retryReason, 'format');
+
+    const longContext = {
+        baseProfile: `底稿开头${'甲'.repeat(4000)}底稿结尾`,
+        previousProfile: `旧人设开头${'乙'.repeat(2200)}旧人设结尾`,
+        historySummary: `历史开头${'丙'.repeat(7000)}历史结尾`,
+        recentChat: `近期较早${'丁'.repeat(9000)}近期最新`,
+        novelCtx: `原著较早${'戊'.repeat(3500)}原著最新`,
+        hasTargetEvidence: true,
+    };
+    const compact = niCompactCharacterProfileContext(longContext, 2);
+    const budget = NI_CHARACTER_PROFILE_CONTEXT_BUDGETS[2];
+    assert.ok(compact.baseProfile.length <= budget.baseProfile);
+    assert.ok(compact.previousProfile.length <= budget.previousProfile);
+    assert.ok(compact.historySummary.length <= budget.historySummary);
+    assert.ok(compact.recentChat.length <= budget.recentChat);
+    assert.ok(compact.novelCtx.length <= budget.novelCtx);
+    assert.match(compact.baseProfile, /^底稿开头/);
+    assert.match(compact.historySummary, /^历史开头/);
+    assert.match(compact.historySummary, /历史结尾$/);
+    assert.match(compact.recentChat, /近期最新$/);
+    assert.match(compact.novelCtx, /原著最新$/);
+    assert.equal(compact.hasTargetEvidence, true);
+}
+
+{
     const direct = niSelectCharacterEvidenceMessages([
         { is_system: true, is_user: false, name: '沈青', mes: '林默收起了钥匙。' },
         { is_user: true, name: '用户', mes: '我们先去看看。' },
@@ -192,6 +238,23 @@ const deviation = {
     assert.doesNotMatch(guide, /无关的日常偏差记录/);
     assert.ok(guide.length <= 900);
 
+    const structuredConstraint = `【不可回滚约束】
+- 议长已经死亡，不得恢复为存活。
+【当前场景约束】
+- 艾琳位于北境港口。有效至：场景变化。
+【已失效的原著前提】
+- 原著中的三日后议会已经不再成立。`;
+    const parsed = niParseContinuityConstraintText(structuredConstraint);
+    assert.equal(parsed.structured, true);
+    assert.deepEqual(parsed.hard, ['议长已经死亡，不得恢复为存活。']);
+    assert.deepEqual(parsed.scene, ['艾琳位于北境港口。有效至：场景变化。']);
+    const firewall = niBuildDeviationInjectionGuide({ facts, currentConstraint: structuredConstraint }, {
+        query: '艾琳在北境港口询问议长', maxFacts: 4, maxChars: 1000, hasBranchMemory: true,
+    });
+    assert.match(firewall, /连续性防火墙·不可回滚约束/);
+    assert.match(firewall, /连续性防火墙·当前场景/);
+    assert.match(firewall, /连续性防火墙·已失效原著前提/);
+
     const context = niBuildDeviationFactsContext(facts);
     assert.equal(context[0].importance, 5);
     assert.equal(context[0].irreversible, true);
@@ -209,6 +272,8 @@ for (const required of [
     '三面性',
     '近期直接对话 > 分支历史总结 > 上次分支人设 > 原著稳定底稿',
     '总计260字内',
+    '长度截断后的重试',
+    'NI_CHARACTER_PROFILE_RESPONSE_BUDGETS',
     'irreversible',
     'importance',
 ]) {
