@@ -128,6 +128,12 @@ delete root.ni_dev;
 reloaded.controller.niLoadDeviationStateFromChat({ syncUI: false });
 assert.equal(reloaded.S.devFacts.find(fact => fact.id === 'character_black_key').status, 'retired');
 
+const rangeRemoved = await reloaded.controller.niRemoveDeviationFactsByFloorRange(3, 3);
+assert.equal(rangeRemoved.ok, true);
+assert.equal(rangeRemoved.count, 1);
+assert.equal(reloaded.S.devFacts.find(fact => fact.id === 'npc_location').status, 'retired');
+assert.equal(reloaded.metadata.novelInjectorDeviationV2.facts.find(fact => fact.id === 'npc_location').status, 'retired');
+
 assert.equal(await reloaded.controller.niClearDeviationFactHistory(), true);
 assert.deepEqual(reloaded.metadata.novelInjectorDeviationV2.factHistory, []);
 

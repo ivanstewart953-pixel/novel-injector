@@ -3809,6 +3809,7 @@ select.ni-modal-input {
     color: var(--color-text-tertiary);
 }
 .ni-dev-facts-toolbar,
+.ni-dev-facts-range,
 .ni-dev-history-pager {
     display: flex;
     align-items: center;
@@ -3816,7 +3817,8 @@ select.ni-modal-input {
     min-width: 0;
     margin-top: 4px;
 }
-.ni-dev-facts-toolbar input {
+.ni-dev-facts-toolbar input,
+.ni-dev-facts-range input {
     flex: 1 1 150px;
     min-width: 90px;
     height: 27px;
@@ -3827,8 +3829,22 @@ select.ni-modal-input {
     color: var(--color-text-primary);
     font-size: 11px;
 }
+.ni-dev-facts-range {
+    flex-wrap: wrap;
+}
+.ni-dev-facts-range input {
+    flex: 0 1 105px;
+}
+.ni-dev-facts-range-label,
+.ni-dev-facts-range-separator {
+    flex: 0 0 auto;
+    color: var(--color-text-tertiary);
+    font-size: 10px;
+    white-space: nowrap;
+}
 .ni-dev-facts-filter,
 .ni-dev-facts-page,
+.ni-dev-facts-range-delete,
 .ni-dev-history-pager button {
     flex: 0 0 auto;
     min-height: 25px;
@@ -3847,9 +3863,20 @@ select.ni-modal-input {
 }
 .ni-dev-facts-filter:disabled,
 .ni-dev-facts-page:disabled,
+.ni-dev-facts-range-delete:disabled,
 .ni-dev-history-pager button:disabled {
     cursor: default;
     opacity: .38;
+}
+.ni-dev-facts-range-delete {
+    color: var(--ni-primary);
+}
+.ni-dev-facts-range-delete:hover:not(:disabled) {
+    border-color: var(--ni-primary);
+    background: var(--ni-primary-alpha-10, rgba(160, 68, 94, .1));
+}
+.ni-dev-facts-range input:disabled {
+    opacity: .5;
 }
 .ni-dev-facts-count,
 .ni-dev-history-pager > span {

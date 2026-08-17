@@ -4,8 +4,10 @@ import {
     NI_DEV_FACT_PAGE_SIZE,
     niIsLikelyGarbledDeviationText,
     niMergeDeviationFactPageDrafts,
+    niNormalizeDeviationFloorRange,
     niPaginateDeviationItems,
     niPrepareDeviationFactPageCommit,
+    niSelectDeviationFactIdsByFloorRange,
     niSelectDeviationFactsForPrompt,
 } from './lib/world-system.js';
 import {
@@ -38,6 +40,33 @@ const facts = Array.from({ length: 2000 }, (_, index) => ({
     const searched = niPaginateDeviationItems(facts, { query: '第 18 条' });
     assert.equal(searched.matched, 1);
     assert.equal(searched.items[0].id, 'fact:17');
+
+    const expanded = niPaginateDeviationItems(facts, { showAll: true });
+    assert.equal(expanded.items.length, 2000);
+    assert.equal(expanded.start, 0);
+    assert.equal(expanded.end, 2000);
+    assert.equal(expanded.hasOlder, false);
+    assert.equal(expanded.hasNewer, false);
+}
+
+{
+    const floorFacts = [
+        { id: 'event_100', text: '第一条', status: 'active', sourceFloor: 100 },
+        { id: 'event_150', text: '第二条', status: 'active', source_floor: 150 },
+        { id: 'event_200', text: '第三条', status: 'active', updatedFloor: 200 },
+        { id: 'event_unknown', text: '无楼层', status: 'active' },
+        { id: 'event_retired', text: '已退役', status: 'retired', sourceFloor: 125 },
+    ];
+    assert.deepEqual(niNormalizeDeviationFloorRange(200, 100), { start: 100, end: 200 });
+    assert.equal(niNormalizeDeviationFloorRange('', 100), null);
+    assert.deepEqual(
+        niSelectDeviationFactIdsByFloorRange(floorFacts, 100, 150),
+        ['event_100', 'event_150'],
+    );
+    assert.deepEqual(
+        niSelectDeviationFactIdsByFloorRange(floorFacts, 200, 100),
+        ['event_100', 'event_150', 'event_200'],
+    );
 }
 
 {
