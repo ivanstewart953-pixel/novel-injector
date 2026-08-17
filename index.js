@@ -158,6 +158,8 @@ import {
 import {
     createGenerationController,
     niBuildWorldInjectionText,
+    niNormalizeDeviationFloorRange,
+    niSelectDeviationFactIdsByFloorRange,
 } from './lib/world-system.js';
 
 import {
@@ -3078,6 +3080,7 @@ const {
     niApplyDeviationState,
     niSaveDeviationChatState,
     niClearDeviationFactHistory,
+    niRemoveDeviationFactsByFloorRange,
     niClearLegacyDeviationSettings,
     niReadLegacyDeviationState,
     niLoadDeviationStateFromChat,
@@ -4182,7 +4185,10 @@ jQuery(async () => {
         const editing = this.getAttribute('aria-expanded') === 'true';
         if (!editing) {
             const list = q('#ni-dev-facts-list');
-            if (list) list.dataset.removedFactIds = '[]';
+            if (list) {
+                list.dataset.removedFactIds = '[]';
+                list.dataset.showAll = 'false';
+            }
             this.setAttribute('aria-expanded', 'true');
             this.textContent = '保存';
             niRenderDeviationFactNotebook();
@@ -4225,6 +4231,16 @@ jQuery(async () => {
         if (list) list.dataset.page = '0';
         niRenderDeviationFactNotebook();
     });
+    $app.on('click', '#ni-dev-facts-expand', function(e) {
+        e.preventDefault();
+        if (this.disabled) return;
+        const list = q('#ni-dev-facts-list');
+        if (!list) return;
+        const showAll = list.dataset.showAll !== 'true';
+        list.dataset.showAll = String(showAll);
+        list.dataset.page = '0';
+        niRenderDeviationFactNotebook();
+    });
     $app.on('click', '#ni-dev-facts-older, #ni-dev-facts-newer', function(e) {
         e.preventDefault();
         const list = q('#ni-dev-facts-list');
@@ -4232,6 +4248,37 @@ jQuery(async () => {
         const page = Math.max(0, parseInt(list.dataset.page, 10) || 0);
         list.dataset.page = String(Math.max(0, page + (this.id === 'ni-dev-facts-older' ? 1 : -1)));
         niRenderDeviationFactNotebook();
+    });
+    $app.on('click', '#ni-dev-facts-range-delete', async function(e) {
+        e.preventDefault();
+        if (this.disabled) return;
+        const startInput = q('#ni-dev-facts-range-start');
+        const endInput = q('#ni-dev-facts-range-end');
+        const range = niNormalizeDeviationFloorRange(startInput?.value, endInput?.value);
+        if (!range) {
+            alert('请输入两个不小于 0 的整数楼层。');
+            return;
+        }
+        const matchedIds = niSelectDeviationFactIdsByFloorRange(S.devFacts, range.start, range.end);
+        if (!matchedIds.length) {
+            alert(`第 ${range.start}-${range.end} 层没有可删除的当前分支事实。`);
+            return;
+        }
+        if (!confirm(`确定移除第 ${range.start}-${range.end} 层的 ${matchedIds.length} 条当前分支事实吗？聊天正文不会被删除。`)) return;
+        this.disabled = true;
+        const result = await niRemoveDeviationFactsByFloorRange(range.start, range.end);
+        this.disabled = false;
+        if (!result.ok) {
+            alert(result.reason === 'save'
+                ? '批量删除失败：聊天存档未能保存，请查看控制台日志后重试。'
+                : '指定楼层范围内没有可删除的当前分支事实。');
+            return;
+        }
+        if (startInput) startInput.value = '';
+        if (endInput) endInput.value = '';
+        const list = q('#ni-dev-facts-list');
+        if (list) list.dataset.page = '0';
+        niSyncDeviationResultUI({ preserveBody: true });
     });
     $app.on('click', '.ni-dev-fact-remove', function(e) {
         e.preventDefault();
