@@ -1215,6 +1215,46 @@
 .ni-bt { background: var(--ni-success-soft, #E1F5EE); color: var(--ni-success-text, #0F6E56); }
 .ni-bc { background: var(--ni-pivot-soft, #FCF7FB); color: var(--ni-pivot-text, #7C5071); }
 
+.ni-dev-rerun-range {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 7px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.ni-dev-rerun-label,
+.ni-dev-rerun-separator {
+  flex: 0 0 auto;
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.ni-dev-rerun-range input {
+  flex: 0 1 105px;
+  min-width: 82px;
+  height: 27px;
+  padding: 3px 7px;
+  border: 1px solid var(--color-border-primary);
+  border-radius: 6px;
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+  font-size: 11px;
+}
+.ni-dev-rerun-btn {
+  flex: 0 0 auto;
+  min-height: 27px;
+  padding: 3px 8px;
+  border: 1px solid var(--ni-success-border, #6BBF9E);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ni-success-text, #2E7D5E);
+  font-size: 10px;
+  cursor: pointer;
+}
+.ni-dev-rerun-btn:hover:not(:disabled) { background: var(--ni-success-soft, #E8F5EF); }
+.ni-dev-rerun-btn:disabled,
+.ni-dev-rerun-range input:disabled { opacity: .4; cursor: not-allowed; }
 .ni-dev-note { font-size: 12px; color: #854F0B; line-height: 1.6; margin-top: 7px; }
 .ni-dev-note:empty { display: none; }
 

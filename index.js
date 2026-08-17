@@ -3104,6 +3104,7 @@ const {
     niGetEnabledDevStages,
     niBuildDevStageReference,
     niRunDev,
+    niRunDevRange,
     niCurrentChatFloorCount,
     niNormalizeDevCoveredFloorToTotal,
     niResetDevAutoCounter,
@@ -4145,6 +4146,30 @@ jQuery(async () => {
     $app.on('click', '#ni-btn-dev', async () => {
         const result = await niRunDev();
         if (result?.ok) niResetDevAutoCounter();
+    });
+    $app.on('click', '#ni-dev-rerun-btn', async function(e) {
+        e.preventDefault();
+        if (this.disabled) return;
+        const startInput = q('#ni-dev-rerun-start');
+        const endInput = q('#ni-dev-rerun-end');
+        const normalized = niNormalizeDeviationFloorRange(startInput?.value, endInput?.value);
+        if (!normalized || normalized.start < 1) {
+            alert('请输入两个大于 0 的整数楼层。');
+            return;
+        }
+        const range = { startFloor: normalized.start, endFloor: normalized.end };
+        const total = niCurrentChatFloorCount();
+        if (range.endFloor > total) {
+            alert(`当前聊天最高为第 ${total} 楼，请缩小重新总结范围。`);
+            return;
+        }
+        if (!confirm(`确定重新总结${niDevRangeLabel(range)}吗？将按当前单批楼层数分批调用偏差分析，并只补录耐久事实。`)) return;
+        const result = await niRunDevRange(range);
+        if (!result?.ok && !result?.error) {
+            alert(result?.reason === 'busy'
+                ? '偏差分析正在运行，请稍候再试。'
+                : '指定范围重新总结失败，请查看偏差状态提示。');
+        }
     });
     $app.on('click', '#ni-dev-cfg-btn', () => {
         niToggleDevCfgPanel();

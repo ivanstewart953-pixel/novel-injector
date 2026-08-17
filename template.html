@@ -668,6 +668,13 @@
           </div>
         </div>
         <button class="ni-btn ni-btn-w" id="ni-btn-dev"><i class="ti ti-analyze"></i>分析当前偏差</button>
+        <div class="ni-dev-rerun-range" title="按“手动更新读取”的楼层数分批重析，只补录耐久事实，不回退已总结进度">
+          <span class="ni-dev-rerun-label">指定楼层重析</span>
+          <input type="number" id="ni-dev-rerun-start" min="1" step="1" inputmode="numeric" placeholder="起始楼层" aria-label="重新总结起始楼层">
+          <span class="ni-dev-rerun-separator">—</span>
+          <input type="number" id="ni-dev-rerun-end" min="1" step="1" inputmode="numeric" placeholder="结束楼层" aria-label="重新总结结束楼层">
+          <button type="button" class="ni-dev-rerun-btn" id="ni-dev-rerun-btn"><i class="ti ti-refresh"></i>重新总结</button>
+        </div>
         <div id="ni-dev-note" class="ni-dev-note" role="status" aria-live="polite"></div>
         <div id="ni-dev-result-wrap" style="display:none;margin-top:10px;">
           <div id="ni-dev-result-toggle" class="ni-ctitle-toggle" style="font-size:11px;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.05em;font-weight:500;margin-bottom:6px;width:100%;" title="收起/展开">
