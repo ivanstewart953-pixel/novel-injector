@@ -8,7 +8,10 @@ import {
     niPrepareDeviationFactPageCommit,
     niSelectDeviationFactsForPrompt,
 } from './lib/world-system.js';
-import { niBuildDeviationInjectionGuide } from './lib/story-data.js';
+import {
+    niBuildDeviationInjectionGuide,
+    niReconcileDeviationFacts,
+} from './lib/story-data.js';
 
 const facts = Array.from({ length: 2000 }, (_, index) => ({
     id: `fact:${index}`,
@@ -57,6 +60,16 @@ const facts = Array.from({ length: 2000 }, (_, index) => ({
     assert.equal(committed.facts.some(item => item.id === 'fact:1999'), false);
     assert.equal(committed.facts.find(item => item.id === 'fact:1998').text, '再次修正的事实');
     assert.equal(committed.facts.some(item => item.id === 'fact:0'), true);
+
+    const reconciled = niReconcileDeviationFacts(facts, committed.facts, {
+        floor: 2001,
+        preserveMissing: true,
+        removed: committed.removedFacts,
+    });
+    assert.equal(reconciled.facts.find(item => item.id === 'fact:1997').status, 'retired');
+    assert.equal(reconciled.facts.find(item => item.id === 'fact:1999').status, 'retired');
+    assert.equal(reconciled.facts.find(item => item.id === 'fact:0').status, 'active');
+    assert.equal(reconciled.changes.filter(item => item.action === 'remove').length, 2);
 }
 
 {
