@@ -93,6 +93,13 @@ const facts = Array.from({ length: 2000 }, (_, index) => ({
     assert.equal(protectedSections.currentConstraint, '当前场景：第 1000 楼');
     assert.equal(protectedSections.preservedFacts, '仍适用的原著事实');
     assert.equal(protectedSections.facts[0].id, 'event_missing');
+
+    const restored = niReconcileDeviationFacts([
+        { id: 'event_deleted', text: '曾被手动删除的耐久事实', status: 'retired', sourceFloor: 120 },
+    ], [
+        { id: 'event_deleted', text: '曾被手动删除的耐久事实', status: 'active', sourceFloor: 120 },
+    ], { floor: 150, range: { startFloor: 111, endFloor: 120 }, preserveMissing: true });
+    assert.equal(restored.facts.find(item => item.id === 'event_deleted').status, 'active');
 }
 
 {
