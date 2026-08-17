@@ -73,6 +73,24 @@ const facts = Array.from({ length: 2000 }, (_, index) => ({
 }
 
 {
+    const customIdFacts = [
+        { id: 'event_black_key', text: '黑曜密钥仍由艾琳持有。', kind: 'event', status: 'active', sourceFloor: 8 },
+        { id: 'character_location_7', text: '艾琳位于港口。', kind: 'state', status: 'active', sourceFloor: 11 },
+    ];
+    const committed = niPrepareDeviationFactPageCommit(customIdFacts, [
+        { id: 'character_location_7', text: '艾琳位于港口。', kind: 'state' },
+    ], ['event_black_key']);
+    const reconciled = niReconcileDeviationFacts(customIdFacts, committed.facts, {
+        floor: 12,
+        preserveMissing: true,
+        removed: committed.removedFacts,
+    });
+    assert.equal(reconciled.facts.find(item => item.id === 'event_black_key').status, 'retired');
+    assert.equal(reconciled.facts.find(item => item.id === 'character_location_7').status, 'active');
+    assert.equal(reconciled.changes.filter(item => item.action === 'remove').length, 1);
+}
+
+{
     assert.equal(niIsLikelyGarbledDeviationText('正常的中文分支事实。'), false);
     assert.equal(niIsLikelyGarbledDeviationText('角色状态：���'), true);
     assert.equal(niIsLikelyGarbledDeviationText('锟斤拷锟斤拷'), true);

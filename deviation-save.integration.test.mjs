@@ -15,7 +15,7 @@ import {
     niReconcileDeviationFacts,
 } from './lib/story-data.js';
 
-function createHarness(root, { editing = true, removed = [], visibleIds = ['fact:1', 'fact:3'] } = {}) {
+function createHarness(root, { editing = true, removed = [], visibleIds = ['event_opening', 'npc_location'] } = {}) {
     const S = {
         devFacts: [],
         devFactHistory: [],
@@ -28,7 +28,7 @@ function createHarness(root, { editing = true, removed = [], visibleIds = ['fact
     };
     const inputs = visibleIds.map(id => ({
         dataset: { factId: id, factKind: 'fact' },
-        value: id === 'fact:1' ? '事实一' : '事实三',
+        value: id === 'event_opening' ? '事实一' : '事实三',
     }));
     const list = {
         dataset: { removedFactIds: JSON.stringify(removed), page: '0' },
@@ -96,11 +96,11 @@ const root = {
         schemaVersion: 2,
         sourceFloorVersion: 2,
         facts: [
-            { id: 'fact:1', text: '事实一', kind: 'fact', status: 'active', sourceFloor: 1 },
-            { id: 'fact:2', text: '事实二', kind: 'fact', status: 'active', sourceFloor: 2 },
-            { id: 'fact:3', text: '事实三', kind: 'fact', status: 'active', sourceFloor: 3 },
+            { id: 'event_opening', text: '事实一', kind: 'fact', status: 'active', sourceFloor: 1 },
+            { id: 'character_black_key', text: '事实二', kind: 'fact', status: 'active', sourceFloor: 2 },
+            { id: 'npc_location', text: '事实三', kind: 'fact', status: 'active', sourceFloor: 3 },
         ],
-        factHistory: [{ action: 'add', factId: 'fact:2', before: '', after: '事实二', floor: 2 }],
+        factHistory: [{ action: 'add', factId: 'character_black_key', before: '', after: '事实二', floor: 2 }],
         currentConstraint: '当前约束',
         preservedFacts: '原著参考',
         coveredFloor: 3,
@@ -108,25 +108,25 @@ const root = {
     },
 };
 
-const first = createHarness(root, { editing: false, removed: ['fact:2'] });
+const first = createHarness(root, { editing: false, removed: ['character_black_key'] });
 first.controller.niLoadDeviationStateFromChat({ syncUI: false });
 await new Promise(resolve => setTimeout(resolve, 0));
 assert.equal(first.metadata.novelInjectorDeviationV2.facts.length, 3);
 first.setEditing(true);
 first.controller.niUpdateDeviationSectionsFromUI();
-assert.equal(first.S.devFacts.find(fact => fact.id === 'fact:2').status, 'retired');
+assert.equal(first.S.devFacts.find(fact => fact.id === 'character_black_key').status, 'retired');
 first.setEditing(false);
 assert.equal(await first.controller.niQueueDeviationGuideSave({ immediate: true }), true);
 assert.equal(first.getSaveCount(), 0);
 assert.ok(first.getMetadataSaveCount() >= 2);
-assert.equal(root.ni_dev.facts.find(fact => fact.id === 'fact:2').status, 'retired');
-assert.equal(first.metadata.novelInjectorDeviationV2.facts.find(fact => fact.id === 'fact:2').status, 'retired');
+assert.equal(root.ni_dev.facts.find(fact => fact.id === 'character_black_key').status, 'retired');
+assert.equal(first.metadata.novelInjectorDeviationV2.facts.find(fact => fact.id === 'character_black_key').status, 'retired');
 
 const reloaded = createHarness(root, { editing: false, removed: [] });
 Object.assign(reloaded.metadata, first.metadata);
 delete root.ni_dev;
 reloaded.controller.niLoadDeviationStateFromChat({ syncUI: false });
-assert.equal(reloaded.S.devFacts.find(fact => fact.id === 'fact:2').status, 'retired');
+assert.equal(reloaded.S.devFacts.find(fact => fact.id === 'character_black_key').status, 'retired');
 
 assert.equal(await reloaded.controller.niClearDeviationFactHistory(), true);
 assert.deepEqual(reloaded.metadata.novelInjectorDeviationV2.factHistory, []);
