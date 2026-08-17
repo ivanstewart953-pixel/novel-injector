@@ -3077,6 +3077,7 @@ const {
     niUpdateDeviationSectionsFromUI,
     niApplyDeviationState,
     niSaveDeviationChatState,
+    niClearDeviationFactHistory,
     niClearLegacyDeviationSettings,
     niReadLegacyDeviationState,
     niLoadDeviationStateFromChat,
@@ -4167,8 +4168,11 @@ jQuery(async () => {
         e.stopPropagation();
         if (!Array.isArray(S.devFactHistory) || !S.devFactHistory.length) return;
         if (!confirm('确定清除所有变更记录吗？当前分支事实不会受影响。')) return;
-        S.devFactHistory = [];
-        await niQueueDeviationGuideSave({ immediate: true });
+        const saved = await niClearDeviationFactHistory();
+        if (!saved) {
+            alert('清除变更记录失败：聊天存档未能保存，请查看控制台日志后重试。');
+            return;
+        }
         niSyncDeviationResultUI({ preserveBody: true });
     });
     $app.on('click', '#ni-dev-facts-edit-toggle', async function() {
@@ -4191,7 +4195,13 @@ jQuery(async () => {
             S.devCoveredFloor = 0;
             S.devLastRange = null;
         }
-        await niQueueDeviationGuideSave({ immediate: true });
+        const saved = await niQueueDeviationGuideSave({ immediate: true });
+        if (!saved) {
+            this.setAttribute('aria-expanded', 'true');
+            this.textContent = '保存';
+            alert('偏差记录保存失败：删除内容尚未写入聊天存档，请查看控制台日志后重试。');
+            return;
+        }
         niSyncDeviationResultUI({ preserveBody: true });
     });
     $app.on('input', '.ni-dev-fact-inline-input', function() {

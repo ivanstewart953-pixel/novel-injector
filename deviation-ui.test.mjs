@@ -5,6 +5,7 @@ import {
     niIsLikelyGarbledDeviationText,
     niMergeDeviationFactPageDrafts,
     niPaginateDeviationItems,
+    niPrepareDeviationFactPageCommit,
     niSelectDeviationFactsForPrompt,
 } from './lib/world-system.js';
 import { niBuildDeviationInjectionGuide } from './lib/story-data.js';
@@ -46,6 +47,16 @@ const facts = Array.from({ length: 2000 }, (_, index) => ({
     assert.equal(merged.find(item => item.id === 'fact:1998').text, '已修正的倒数第二条事实');
     assert.equal(merged.some(item => item.id === 'fact:1999'), false);
     assert.equal(merged.at(-1).text, '手动新增事实');
+
+    const committed = niPrepareDeviationFactPageCommit(facts, [
+        { id: 'fact:1997', text: '', kind: 'event' },
+        { id: 'fact:1998', text: '再次修正的事实', kind: 'state' },
+    ], ['fact:1999']);
+    assert.deepEqual(new Set(committed.removedFacts), new Set(['fact:1997', 'fact:1999']));
+    assert.equal(committed.facts.some(item => item.id === 'fact:1997'), false);
+    assert.equal(committed.facts.some(item => item.id === 'fact:1999'), false);
+    assert.equal(committed.facts.find(item => item.id === 'fact:1998').text, '再次修正的事实');
+    assert.equal(committed.facts.some(item => item.id === 'fact:0'), true);
 }
 
 {
